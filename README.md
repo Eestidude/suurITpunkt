@@ -5,4 +5,4 @@ Jaanus Liiv
 Edgard Liskman
 Pavel Terentjev
 
-Probleem:
+Probleem: Tahaksime mingit "tööriista", millega investeerimist harjutada
