@@ -1,2 +1,8 @@
 # suurITpunkt
 Programmeerimine 4
+Nimed:
+Jaanus Liiv
+Edgard Liskman
+Pavel Terentjev
+
+Probleem:
