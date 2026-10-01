@@ -10,11 +10,12 @@ for ekraan in get_monitors():
 
 scale_height = ek/1440
 scale_width = el/2560
-ek = 1378 * scale_height
+ek = 1440 * scale_height - 62
 
 running = True
 
-screen = pg.display.set_mode((el,ek))
+screen = pg.display.set_mode((el,ek), pg.RESIZABLE)
+
 
 
 tausta_värv = [230,230,230]
@@ -73,4 +74,4 @@ side_bar = Tausta_objekt(pg.Rect(0,1/6*ek,el/6, 7/8*ek), [255,255,255])
 
 
 start_menu()
-pg.quit()
+#pg.quit()
