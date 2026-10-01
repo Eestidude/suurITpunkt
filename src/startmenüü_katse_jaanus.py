@@ -10,7 +10,7 @@ for ekraan in get_monitors():
 
 scale_height = ek/1440
 scale_width = el/2560
-ek = 1378
+ek = 1378 * scale_height
 
 running = True
 
