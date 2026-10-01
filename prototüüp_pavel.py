@@ -101,9 +101,7 @@ def draw_window():
         text1.get_rect(center=button1.center)
     )
 
-    # =========================================
-    # Main button 2
-    # =========================================
+
     button2 = pygame.Rect(
         202, 186, 301, 76
     )
