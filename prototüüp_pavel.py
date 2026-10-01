@@ -19,9 +19,9 @@ clock = pygame.time.Clock()
 def draw_window():
     screen.fill(WHITE)
 
-    # =========================================
+  
     # Left vertical divider
-    # =========================================
+   
     pygame.draw.line(
         screen,
         BLACK,
@@ -30,14 +30,14 @@ def draw_window():
         6
     )
 
-    # =========================================
+ 
     # Empty boxes on the left
-    # =========================================
+
     box_x = 7
     box_width = 61
     box_height = 49
 
-    # Positions based on screenshot
+  
     box_positions = [51, 105, 160, 215, 270, 320]
 
     for y in box_positions:
@@ -54,9 +54,9 @@ def draw_window():
             5
         )
 
-    # =========================================
+    
     # Top-right empty box
-    # =========================================
+
     pygame.draw.rect(
         screen,
         WHITE,
@@ -70,9 +70,9 @@ def draw_window():
         5
     )
 
-    # =========================================
+  
     # Main button 1
-    # =========================================
+   
     button1 = pygame.Rect(
         202, 102, 301, 75
     )
@@ -133,9 +133,9 @@ def draw_window():
     )
 
 
-# =============================================
+
 # Main loop
-# =============================================
+
 running = True
 
 while running:
