@@ -74,4 +74,4 @@ side_bar = Tausta_objekt(pg.Rect(0,1/6*ek,el/6, 7/8*ek), [255,255,255])
 
 
 start_menu()
-#pg.quit()
+pg.quit()
