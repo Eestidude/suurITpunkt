@@ -1,27 +1,14 @@
-import pygame
 import math
+
+import pygame
 
 pygame.init()
 
-# ============================================================
-# WINDOW
-# ============================================================
-
 BASE_WIDTH = 600
 BASE_HEIGHT = 400
-
-screen = pygame.display.set_mode(
-    (BASE_WIDTH, BASE_HEIGHT),
-    pygame.RESIZABLE
-)
-
+screen = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Ballistic Simulator")
-
 clock = pygame.time.Clock()
-
-# ============================================================
-# COLORS
-# ============================================================
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -30,712 +17,347 @@ RED = (235, 100, 100)
 BLUE = (50, 150, 255)
 GRAY = (100, 100, 100)
 
-# ============================================================
-# SIMULATION
-# ============================================================
-
 GRAVITY = 500.0
-POWER = 2.0
+PIXELS_PER_METER = 50.0
+LAUNCH_IMPULSE_SECONDS = 0.2
 
-launcher_pos = pygame.Vector2(105, 350)
+PROJECTILES = [
+    {"name": "Light", "mass": 0.5, "radius": 5, "color": BLUE},
+    {"name": "Medium", "mass": 1.0, "radius": 8, "color": BLACK},
+    {"name": "Heavy", "mass": 2.0, "radius": 11, "color": GRAY},
+]
 
+launcher_pos = pygame.Vector2(95, 355)
 projectile = None
 velocity = pygame.Vector2()
 flying = False
-
-aiming = False
-mouse_pos = pygame.Vector2()
-
 trajectory = []
 
-# ============================================================
-# UI / SCALING
-# ============================================================
+force_text = "60"
+angle_text = "45"
+projectile_index = 1
+focused_field = None
+dropdown_open = False
+status_message = ""
+status_color = RED
+running = True
+
 
 def get_scale():
-    w, h = screen.get_size()
-
-    return min(
-        w / BASE_WIDTH,
-        h / BASE_HEIGHT
-    )
+    width, height = screen.get_size()
+    return min(width / BASE_WIDTH, height / BASE_HEIGHT)
 
 
 def to_screen(pos):
     pos = pygame.Vector2(pos)
-
     scale = get_scale()
-
-    w, h = screen.get_size()
-
-    offset_x = (w - BASE_WIDTH * scale) / 2
-    offset_y = (h - BASE_HEIGHT * scale) / 2
-
+    width, height = screen.get_size()
+    offset_x = (width - BASE_WIDTH * scale) / 2
+    offset_y = (height - BASE_HEIGHT * scale) / 2
     return pygame.Vector2(
         offset_x + pos.x * scale,
-        offset_y + pos.y * scale
+        offset_y + pos.y * scale,
     )
 
 
 def from_screen(pos):
-    """
-    Convert screen coordinates back into simulation coordinates.
-    """
     scale = get_scale()
-
-    w, h = screen.get_size()
-
-    offset_x = (w - BASE_WIDTH * scale) / 2
-    offset_y = (h - BASE_HEIGHT * scale) / 2
-
+    width, height = screen.get_size()
+    offset_x = (width - BASE_WIDTH * scale) / 2
+    offset_y = (height - BASE_HEIGHT * scale) / 2
     return pygame.Vector2(
         (pos[0] - offset_x) / scale,
-        (pos[1] - offset_y) / scale
+        (pos[1] - offset_y) / scale,
     )
 
 
-def scaled_rect(x, y, w, h):
-    p1 = to_screen((x, y))
-    p2 = to_screen((x + w, y + h))
-
+def scaled_rect(x, y, width, height):
+    first = to_screen((x, y))
+    second = to_screen((x + width, y + height))
     return pygame.Rect(
-        int(p1.x),
-        int(p1.y),
-        int(p2.x - p1.x),
-        int(p2.y - p1.y)
+        round(first.x),
+        round(first.y),
+        round(second.x - first.x),
+        round(second.y - first.y),
     )
 
 
-# ============================================================
-# BUTTON
-# ============================================================
+def font(size, bold=False):
+    return pygame.font.SysFont("Arial", max(9, round(size * get_scale())), bold=bold)
+
+
+def draw_text(text, position, size=12, color=BLACK, bold=False):
+    image = font(size, bold).render(text, True, color)
+    screen.blit(image, to_screen(position))
+
 
 def draw_button(rect, text, color):
-
-    pygame.draw.rect(
-        screen,
-        color,
-        rect
-    )
-
-    pygame.draw.rect(
-        screen,
-        BLACK,
-        rect,
-        max(1, int(2 * get_scale()))
-    )
-
-    font_size = max(10, int(14 * get_scale()))
-
-    font = pygame.font.SysFont(
-        "Arial",
-        font_size
-    )
-
-    text_surface = font.render(
-        text,
-        True,
-        BLACK
-    )
-
+    pygame.draw.rect(screen, color, rect)
+    pygame.draw.rect(screen, BLACK, rect, max(1, round(2 * get_scale())))
+    image = font(13, True).render(text, True, BLACK)
     screen.blit(
-        text_surface,
-        (
-            rect.centerx - text_surface.get_width() // 2,
-            rect.centery - text_surface.get_height() // 2
-        )
+        image,
+        (rect.centerx - image.get_width() // 2, rect.centery - image.get_height() // 2),
     )
 
 
-# ============================================================
-# DOTTED TRAJECTORY
-# ============================================================
+def draw_input(rect, value, active=False):
+    pygame.draw.rect(screen, WHITE, rect)
+    pygame.draw.rect(
+        screen,
+        BLUE if active else BLACK,
+        rect,
+        max(1, round((2 if active else 1) * get_scale())),
+    )
+    image = font(12).render(value, True, BLACK)
+    screen.blit(
+        image,
+        (rect.x + round(4 * get_scale()), rect.centery - image.get_height() // 2),
+    )
+
 
 def draw_dotted_line(points, color=BLACK):
-
     if len(points) < 2:
         return
 
     scale = get_scale()
-
     spacing = 18 * scale
-    radius = max(2, int(6 * scale))
-
+    radius = max(2, round(5 * scale))
     distance = 0
 
-    for i in range(1, len(points)):
-
-        p1 = to_screen(points[i - 1])
-        p2 = to_screen(points[i])
-
-        segment = p2 - p1
+    for index in range(1, len(points)):
+        first = to_screen(points[index - 1])
+        second = to_screen(points[index])
+        segment = second - first
         length = segment.length()
-
         if length == 0:
             continue
-
         direction = segment.normalize()
-
         while distance < length:
-
-            point = p1 + direction * distance
-
-            pygame.draw.circle(
-                screen,
-                color,
-                (int(point.x), int(point.y)),
-                radius
-            )
-
+            point = first + direction * distance
+            pygame.draw.circle(screen, color, (round(point.x), round(point.y)), radius)
             distance += spacing
-
         distance -= length
 
 
-# ============================================================
-# RESET
-# ============================================================
+def start_simulation():
+    global projectile, velocity, flying, trajectory, status_message
 
-def reset():
+    try:
+        force = float(force_text)
+        angle = float(angle_text)
+    except ValueError:
+        status_message = "Enter a valid number for force and angle."
+        return
 
-    global projectile
-    global velocity
-    global flying
-    global trajectory
+    if not math.isfinite(force) or not 0 < force <= 500:
+        status_message = "Force must be greater than 0 and at most 500 N."
+        return
+    if not math.isfinite(angle) or not 0 <= angle <= 90:
+        status_message = "Angle must be between 0 and 90 degrees."
+        return
 
-    projectile = None
-    velocity = pygame.Vector2()
+    selected = PROJECTILES[projectile_index]
+    speed = (
+        force
+        / selected["mass"]
+        * LAUNCH_IMPULSE_SECONDS
+        * PIXELS_PER_METER
+    )
+    radians = math.radians(angle)
+    velocity = pygame.Vector2(
+        math.cos(radians) * speed,
+        -math.sin(radians) * speed,
+    )
+    projectile = launcher_pos.copy()
+    flying = True
+    trajectory = [projectile.copy()]
+    status_message = ""
+
+
+def stop_simulation():
+    global flying, status_message
     flying = False
-    trajectory = []
+    status_message = "Simulation stopped."
 
 
-# ============================================================
-# MAIN LOOP
-# ============================================================
+def set_projectile(index):
+    global projectile_index, dropdown_open
+    projectile_index = index % len(PROJECTILES)
+    dropdown_open = False
 
-running = True
 
 while running:
-
     dt = clock.tick(60) / 1000.0
 
-    # --------------------------------------------------------
-    # EVENTS
-    # --------------------------------------------------------
+    start_rect = scaled_rect(80, 7, 52, 32)
+    stop_rect = scaled_rect(138, 7, 48, 32)
+    force_rect = scaled_rect(223, 11, 55, 24)
+    projectile_rect = scaled_rect(348, 11, 91, 24)
+    angle_rect = scaled_rect(492, 11, 51, 24)
 
     for event in pygame.event.get():
-
         if event.type == pygame.QUIT:
             running = False
 
-        # ----------------------------------------------------
-        # Mouse down
-        # ----------------------------------------------------
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            focused_field = None
 
-        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if start_rect.collidepoint(event.pos):
+                dropdown_open = False
+                start_simulation()
+            elif stop_rect.collidepoint(event.pos):
+                dropdown_open = False
+                stop_simulation()
+            elif force_rect.collidepoint(event.pos):
+                focused_field = "force"
+                dropdown_open = False
+            elif angle_rect.collidepoint(event.pos):
+                focused_field = "angle"
+                dropdown_open = False
+            elif projectile_rect.collidepoint(event.pos):
+                dropdown_open = not dropdown_open
+            elif dropdown_open:
+                for index in range(len(PROJECTILES)):
+                    option_rect = scaled_rect(
+                        348,
+                        35 + index * 24,
+                        91,
+                        24,
+                    )
+                    if option_rect.collidepoint(event.pos):
+                        set_projectile(index)
+                        break
+                else:
+                    dropdown_open = False
 
-            mouse_sim = from_screen(event.pos)
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                focused_field = None
+                dropdown_open = False
+            elif dropdown_open and event.key in (pygame.K_UP, pygame.K_DOWN):
+                step = -1 if event.key == pygame.K_UP else 1
+                set_projectile(projectile_index + step)
+            elif focused_field:
+                value = force_text if focused_field == "force" else angle_text
+                if event.key == pygame.K_BACKSPACE:
+                    value = value[:-1]
+                elif event.key == pygame.K_a and event.mod & pygame.KMOD_CTRL:
+                    value = ""
+                elif event.key == pygame.K_RETURN:
+                    focused_field = None
+                elif event.key == pygame.K_DELETE:
+                    value = ""
+                elif event.unicode and event.unicode in "0123456789.":
+                    if event.unicode != "." or "." not in value:
+                        value += event.unicode
 
-            # Stop button
-            if scaled_rect(155, 33, 55, 30).collidepoint(event.pos):
-
-                reset()
-
-            # Launcher
-            elif (
-                mouse_sim.distance_to(launcher_pos) < 35
-            ):
-
-                aiming = True
-                mouse_pos = mouse_sim
-
-        # ----------------------------------------------------
-        # Mouse movement
-        # ----------------------------------------------------
-
-        elif event.type == pygame.MOUSEMOTION:
-
-            if aiming:
-                mouse_pos = from_screen(event.pos)
-
-        # ----------------------------------------------------
-        # Mouse release
-        # ----------------------------------------------------
-
-        elif event.type == pygame.MOUSEBUTTONUP:
-
-            if aiming:
-
-                aiming = False
-
-                mouse_sim = from_screen(event.pos)
-
-                direction = (
-                    mouse_sim - launcher_pos
-                )
-
-                if direction.length() > 5:
-
-                    direction.normalize_ip()
-
-                    speed = 300 * POWER
-
-                    velocity = direction * speed
-
-                    projectile = launcher_pos.copy()
-
-                    flying = True
-
-                    trajectory = [
-                        projectile.copy()
-                    ]
-
-    # --------------------------------------------------------
-    # PHYSICS
-    # --------------------------------------------------------
+                if focused_field == "force":
+                    force_text = value
+                elif focused_field == "angle":
+                    angle_text = value
 
     if flying and projectile is not None:
-
         velocity.y += GRAVITY * dt
-
         projectile += velocity * dt
+        trajectory.append(projectile.copy())
 
-        trajectory.append(
-            projectile.copy()
-        )
-
-        # Ground collision
-        if projectile.y >= BASE_HEIGHT - 10:
-
-            projectile.y = BASE_HEIGHT - 10
-
+        if projectile.y >= BASE_HEIGHT - 12:
+            projectile.y = BASE_HEIGHT - 12
             flying = False
-
-        # Outside world
-        if (
-            projectile.x < 70
-            or projectile.x > BASE_WIDTH
-            or projectile.y < 60
-        ):
-
+        elif projectile.x > BASE_WIDTH or projectile.x < 72 or projectile.y < 48:
             flying = False
-
-    # ========================================================
-    # DRAW
-    # ========================================================
 
     screen.fill(WHITE)
-
     scale = get_scale()
 
-    # --------------------------------------------------------
-    # Canvas
-    # --------------------------------------------------------
-
-    canvas = scaled_rect(
-        75,
-        0,
-        BASE_WIDTH - 85,
-        BASE_HEIGHT
-    )
-
-    pygame.draw.rect(
-        screen,
-        WHITE,
-        canvas
-    )
-
-    pygame.draw.rect(
+    # Workspace and frame echo the reference's heavy black borders.
+    pygame.draw.rect(screen, WHITE, scaled_rect(72, 48, 528, 352))
+    pygame.draw.rect(screen, BLACK, scaled_rect(72, 48, 528, 352), max(2, round(3 * scale)))
+    pygame.draw.rect(screen, WHITE, scaled_rect(0, 0, 72, 400))
+    pygame.draw.line(
         screen,
         BLACK,
-        canvas,
-        max(1, int(3 * scale))
+        to_screen((72, 47)),
+        to_screen((600, 47)),
+        max(2, round(4 * scale)),
     )
 
-    # --------------------------------------------------------
-    # LEFT TOOL PANEL
-    # --------------------------------------------------------
+    # Left tool rail.
+    for y in (55, 111, 167, 223, 279, 335):
+        pygame.draw.rect(screen, WHITE, scaled_rect(5, y, 58, 46))
+        pygame.draw.rect(screen, BLACK, scaled_rect(5, y, 58, 46), max(2, round(3 * scale)))
 
-    left_panel = scaled_rect(
-        0,
-        0,
-        72,
-        BASE_HEIGHT
-    )
+    pygame.draw.circle(screen, BLACK, tuple(map(round, to_screen((26, 78)))), max(3, round(7 * scale)))
+    pygame.draw.line(screen, BLACK, to_screen((28, 78)), to_screen((49, 65)), max(2, round(3 * scale)))
+    pygame.draw.line(screen, BLACK, to_screen((34, 120)), to_screen((34, 145)), max(2, round(3 * scale)))
+    pygame.draw.polygon(screen, BLACK, [to_screen((27, 139)), to_screen((34, 148)), to_screen((41, 139))])
+    pygame.draw.rect(screen, BLACK, scaled_rect(18, 177, 29, 22), max(2, round(2 * scale)))
+    pygame.draw.circle(screen, BLACK, tuple(map(round, to_screen((32, 202)))), max(2, round(5 * scale)))
+    pygame.draw.circle(screen, BLUE, tuple(map(round, to_screen((32, 247)))), max(3, round(13 * scale)), max(1, round(2 * scale)))
+    pygame.draw.arc(screen, RED, scaled_rect(18, 233, 28, 28), 0, math.pi, max(1, round(2 * scale)))
+    pygame.draw.line(screen, BLACK, to_screen((15, 291)), to_screen((48, 310)), max(2, round(3 * scale)))
+    pygame.draw.polygon(screen, BLACK, [to_screen((48, 310)), to_screen((40, 300)), to_screen((39, 308))])
+    pygame.draw.circle(screen, BLUE, tuple(map(round, to_screen((27, 358)))), max(3, round(12 * scale)))
+    pygame.draw.circle(screen, GREEN, tuple(map(round, to_screen((39, 360)))), max(2, round(5 * scale)))
 
-    pygame.draw.rect(
-        screen,
-        BLACK,
-        left_panel
-    )
-
-    # --------------------------------------------------------
-    # TOOL BUTTONS
-    # --------------------------------------------------------
-
-    tool_y = [
-        8,
-        63,
-        118,
-        173,
-        228,
-        283
+    # Top toolbar: launch controls and editable launch parameters.
+    draw_button(start_rect, "Start", GREEN)
+    draw_button(stop_rect, "Stop", RED)
+    draw_text("Force", (190, 17), 12, bold=True)
+    draw_input(force_rect, force_text, focused_field == "force")
+    draw_text("N", (281, 17), 12)
+    draw_text("Projectile", (291, 17), 11, bold=True)
+    draw_input(projectile_rect, PROJECTILES[projectile_index]["name"])
+    arrow = [
+        to_screen((426, 20)),
+        to_screen((433, 20)),
+        to_screen((429.5, 25)),
     ]
+    pygame.draw.polygon(screen, BLACK, arrow)
+    draw_text("Angle", (454, 17), 12, bold=True)
+    draw_input(angle_rect, angle_text, focused_field == "angle")
+    draw_text("°", (548, 17), 12)
 
-    for y in tool_y:
-
-        rect = scaled_rect(
-            5,
-            y,
-            58,
-            45
-        )
-
-        pygame.draw.rect(
-            screen,
-            WHITE,
-            rect
-        )
-
-        pygame.draw.rect(
-            screen,
-            BLACK,
-            rect,
-            max(1, int(3 * scale))
-        )
-
-    # --------------------------------------------------------
-    # TOOL 1
-    # --------------------------------------------------------
-
-    p = to_screen((28, 29))
-
-    pygame.draw.circle(
-        screen,
-        BLACK,
-        (int(p.x), int(p.y)),
-        max(2, int(7 * scale))
-    )
-
-    pygame.draw.line(
-        screen,
-        BLACK,
-        to_screen((36, 30)),
-        to_screen((52, 20)),
-        max(1, int(3 * scale))
-    )
-
-    # --------------------------------------------------------
-    # TOOL 2 - arrows
-    # --------------------------------------------------------
-
-    pygame.draw.line(
-        screen,
-        BLACK,
-        to_screen((33, 72)),
-        to_screen((33, 95)),
-        max(1, int(3 * scale))
-    )
-
-    pygame.draw.polygon(
-        screen,
-        BLACK,
-        [
-            to_screen((27, 90)),
-            to_screen((33, 99)),
-            to_screen((39, 90))
-        ]
-    )
-
-    # --------------------------------------------------------
-    # TOOL 3 - object
-    # --------------------------------------------------------
-
-    pygame.draw.rect(
-        screen,
-        BLACK,
-        scaled_rect(18, 128, 28, 22),
-        max(1, int(2 * scale))
-    )
-
-    p = to_screen((32, 149))
-
-    pygame.draw.circle(
-        screen,
-        BLACK,
-        (int(p.x), int(p.y)),
-        max(2, int(5 * scale))
-    )
-
-    # --------------------------------------------------------
-    # TOOL 4 - graph
-    # --------------------------------------------------------
-
-    pygame.draw.circle(
-        screen,
-        BLUE,
-        tuple(map(int, to_screen((32, 195)))),
-        max(2, int(13 * scale)),
-        max(1, int(2 * scale))
-    )
-
-    pygame.draw.arc(
-        screen,
-        RED,
-        scaled_rect(18, 181, 28, 28),
-        0,
-        math.pi,
-        max(1, int(2 * scale))
-    )
-
-    # --------------------------------------------------------
-    # TOOL 5 - vector
-    # --------------------------------------------------------
-
-    pygame.draw.line(
-        screen,
-        BLACK,
-        to_screen((15, 246)),
-        to_screen((48, 267)),
-        max(1, int(3 * scale))
-    )
-
-    pygame.draw.polygon(
-        screen,
-        BLACK,
-        [
-            to_screen((48, 267)),
-            to_screen((41, 257)),
-            to_screen((39, 265))
-        ]
-    )
-
-    # --------------------------------------------------------
-    # TOOL 6
-    # --------------------------------------------------------
-
-    pygame.draw.circle(
-        screen,
-        BLUE,
-        tuple(map(int, to_screen((27, 303)))),
-        max(2, int(12 * scale))
-    )
-
-    pygame.draw.circle(
-        screen,
-        GREEN,
-        tuple(map(int, to_screen((39, 305)))),
-        max(2, int(5 * scale))
-    )
-
-    # ========================================================
-    # TOP CONTROLS
-    # ========================================================
-
-    # Alusta
-    draw_button(
-        scaled_rect(80, 8, 65, 30),
-        "Alusta",
-        GREEN
-    )
-
-    # Stop
-    draw_button(
-        scaled_rect(155, 8, 55, 30),
-        "Stop",
-        RED
-    )
-
-    # --------------------------------------------------------
-    # Toolbar squares
-    # --------------------------------------------------------
-
-    for row in range(2):
-
-        for col in range(4):
-
-            rect = scaled_rect(
-                230 + col * 22,
-                10 + row * 20,
-                17,
-                17
-            )
-
-            pygame.draw.rect(
-                screen,
-                BLACK,
-                rect
-            )
-
-            pygame.draw.rect(
-                screen,
-                WHITE,
-                scaled_rect(
-                    235 + col * 22,
-                    15 + row * 20,
-                    7,
-                    7
-                )
-            )
-
-    # ========================================================
-    # TARGET
-    # ========================================================
-
-    target = pygame.Vector2(
-        215,
-        185
-    )
-
-    target_screen = to_screen(target)
-
-    pygame.draw.circle(
-        screen,
-        WHITE,
-        (int(target_screen.x), int(target_screen.y)),
-        int(34 * scale)
-    )
-
-    pygame.draw.circle(
-        screen,
-        BLACK,
-        (int(target_screen.x), int(target_screen.y)),
-        int(34 * scale),
-        max(1, int(5 * scale))
-    )
-
-    # ========================================================
-    # TRAJECTORY
-    # ========================================================
-
+    # Trajectory path.
     if len(trajectory) > 1:
+        draw_dotted_line(trajectory)
 
-        draw_dotted_line(
-            trajectory,
-            BLACK
-        )
-
-    # ========================================================
-    # AIM PREVIEW
-    # ========================================================
-
-    if aiming:
-
-        direction = (
-            mouse_pos - launcher_pos
-        )
-
-        if direction.length() > 5:
-
-            direction.normalize_ip()
-
-            preview_velocity = (
-                direction * (300 * POWER)
-            )
-
-            preview_points = []
-
-            pos = launcher_pos.copy()
-            vel = preview_velocity.copy()
-
-            for _ in range(100):
-
-                preview_points.append(
-                    pos.copy()
-                )
-
-                vel.y += GRAVITY * 0.05
-
-                pos += vel * 0.05
-
-                if pos.y > BASE_HEIGHT - 10:
-                    break
-
-            draw_dotted_line(
-                preview_points,
-                GRAY
-            )
-
-            pygame.draw.line(
-                screen,
-                RED,
-                to_screen(launcher_pos),
-                to_screen(mouse_pos),
-                max(1, int(3 * scale))
-            )
-
-    # ========================================================
-    # LAUNCHER
-    # ========================================================
-
-    launcher_screen = to_screen(
-        launcher_pos
+    # Launcher and projectile.
+    launcher_screen = to_screen(launcher_pos)
+    pygame.draw.circle(screen, BLACK, tuple(map(round, launcher_screen)), max(2, round(12 * scale)))
+    barrel_angle = math.radians(float(angle_text)) if angle_text.replace(".", "", 1).isdigit() else math.pi / 4
+    barrel_end = launcher_pos + pygame.Vector2(
+        math.cos(barrel_angle) * 36,
+        -math.sin(barrel_angle) * 36,
     )
-
-    pygame.draw.circle(
+    pygame.draw.line(
         screen,
         BLACK,
-        (
-            int(launcher_screen.x),
-            int(launcher_screen.y)
-        ),
-        max(2, int(12 * scale))
+        launcher_screen,
+        to_screen(barrel_end),
+        max(2, round(8 * scale)),
     )
 
-    # Barrel
-    if aiming:
+    if projectile is not None:
+        selected = PROJECTILES[projectile_index]
+        point = to_screen(projectile)
+        radius = max(2, round(selected["radius"] * scale))
+        pygame.draw.circle(screen, selected["color"], tuple(map(round, point)), radius)
+        pygame.draw.circle(screen, BLACK, tuple(map(round, point)), radius, max(1, round(scale)))
 
-        barrel_dir = (
-            mouse_pos - launcher_pos
-        )
+    if status_message:
+        message_rect = scaled_rect(82, 53, 510, 22)
+        pygame.draw.rect(screen, WHITE, message_rect)
+        draw_text(status_message, (87, 57), 11, status_color)
 
-        if barrel_dir.length() > 0:
-
-            barrel_dir.scale_to_length(35)
-
-            pygame.draw.line(
-                screen,
-                BLACK,
-                launcher_screen,
-                to_screen(
-                    launcher_pos + barrel_dir
-                ),
-                max(2, int(8 * scale))
-            )
-
-    else:
-
-        pygame.draw.line(
-            screen,
-            BLACK,
-            launcher_screen,
-            to_screen(
-                launcher_pos +
-                pygame.Vector2(30, -20)
-            ),
-            max(2, int(8 * scale))
-        )
-
-    # ========================================================
-    # PROJECTILE
-    # ========================================================
-
-    if flying and projectile is not None:
-
-        p = to_screen(projectile)
-
-        pygame.draw.circle(
-            screen,
-            BLACK,
-            (int(p.x), int(p.y)),
-            max(2, int(7 * scale))
-        )
-
-    # ========================================================
-    # UPDATE
-    # ========================================================
+    if dropdown_open:
+        for index, item in enumerate(PROJECTILES):
+            option_rect = scaled_rect(348, 35 + index * 24, 91, 24)
+            pygame.draw.rect(screen, WHITE, option_rect)
+            pygame.draw.rect(screen, BLACK, option_rect, max(1, round(scale)))
+            draw_text(f"{item['name']} ({item['mass']:g} kg)", (352, 41 + index * 24), 10)
 
     pygame.display.flip()
-
 
 pygame.quit()
