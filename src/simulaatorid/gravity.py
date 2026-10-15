@@ -154,6 +154,59 @@ def body_radius(body):
     return max(8, min(22, round(10 + math.log10(max(mass, 0.01)) * 2)))
 
 
+def move_with_collisions(step):
+    first, second = bodies
+    inverse_first = 0.0 if dragging_body == 0 else 1 / float(first["mass_text"])
+    inverse_second = 0.0 if dragging_body == 1 else 1 / float(second["mass_text"])
+    inverse_total = inverse_first + inverse_second
+    radius = body_radius(first) + body_radius(second)
+    separation = second["pos"] - first["pos"]
+    distance = separation.length()
+
+    # Separate overlapping planets, keeping a dragged planet under the cursor.
+    if distance < radius:
+        normal = separation / distance if distance else pygame.Vector2(1, 0)
+        correction = normal * (radius - distance) / inverse_total
+        first["pos"] -= correction * inverse_first
+        second["pos"] += correction * inverse_second
+
+    velocity_first = first["vel"] if inverse_first else pygame.Vector2()
+    velocity_second = second["vel"] if inverse_second else pygame.Vector2()
+    relative_velocity = velocity_second - velocity_first
+    separation = second["pos"] - first["pos"]
+    speed_squared = relative_velocity.length_squared()
+    approach = separation.dot(relative_velocity)
+    gap = separation.length_squared() - radius**2
+    contact_time = None
+
+    # Sweep the circles through the step so fast planets cannot pass through.
+    if approach < 0 and speed_squared > 0:
+        discriminant = approach**2 - speed_squared * gap
+        if gap <= 1e-8:
+            contact_time = 0.0
+        elif discriminant >= 0:
+            candidate = gap / (-approach + math.sqrt(discriminant))
+            if 0 <= candidate <= step:
+                contact_time = candidate
+
+    travel_time = step if contact_time is None else contact_time
+    first["pos"] += velocity_first * travel_time
+    second["pos"] += velocity_second * travel_time
+    if contact_time is None:
+        return
+
+    normal = (second["pos"] - first["pos"]).normalize()
+    closing_speed = relative_velocity.dot(normal)
+    impulse = -2 * closing_speed / inverse_total
+    first["vel"] -= normal * impulse * inverse_first
+    second["vel"] += normal * impulse * inverse_second
+    remaining = step - contact_time
+    if inverse_first:
+        first["pos"] += first["vel"] * remaining
+    if inverse_second:
+        second["pos"] += second["vel"] * remaining
+
+
 def start_simulation():
     global simulation_running, status_message
 
@@ -267,7 +320,7 @@ while running:
         elif event.type == pygame.MOUSEMOTION and dragging_body is not None:
             body = bodies[dragging_body]
             body["pos"] = from_screen(event.pos)
-            body["pos"].x = max(82, min(BASE_WIDTH - 12, body["pos"].x))
+            body["pos"].x = max(12, min(BASE_WIDTH - 12, body["pos"].x))
             body["pos"].y = max(82, min(BASE_HEIGHT - 12, body["pos"].y))
 
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -316,10 +369,9 @@ while running:
 
             if dragging_body != 0:
                 first["vel"] += acceleration_first * step
-                first["pos"] += first["vel"] * step
             if dragging_body != 1:
                 second["vel"] += acceleration_second * step
-                second["pos"] += second["vel"] * step
+            move_with_collisions(step)
 
         for body in bodies:
             if dragging_body is None:
@@ -329,45 +381,6 @@ while running:
 
     screen.fill(WHITE)
     scale = get_scale()
-
-    # Keep the reference's left tool rail and bold black workspace frame.
-    pygame.draw.rect(screen, WHITE, scaled_rect(72, 68, 528, 332))
-    pygame.draw.rect(
-        screen,
-        BLACK,
-        scaled_rect(72, 68, 528, 332),
-        max(2, round(3 * scale)),
-    )
-    pygame.draw.rect(screen, WHITE, scaled_rect(0, 0, 72, 400))
-    pygame.draw.line(
-        screen,
-        BLACK,
-        to_screen((72, 67)),
-        to_screen((600, 67)),
-        max(2, round(4 * scale)),
-    )
-
-    for y in (76, 130, 184, 238, 292, 346):
-        pygame.draw.rect(screen, WHITE, scaled_rect(5, y, 58, 45))
-        pygame.draw.rect(
-            screen,
-            BLACK,
-            scaled_rect(5, y, 58, 45),
-            max(2, round(3 * scale)),
-        )
-
-    pygame.draw.circle(screen, BLACK, tuple(map(round, to_screen((26, 98)))), max(3, round(7 * scale)))
-    pygame.draw.line(screen, BLACK, to_screen((28, 98)), to_screen((49, 85)), max(2, round(3 * scale)))
-    pygame.draw.line(screen, BLACK, to_screen((34, 139)), to_screen((34, 164)), max(2, round(3 * scale)))
-    pygame.draw.polygon(screen, BLACK, [to_screen((27, 158)), to_screen((34, 167)), to_screen((41, 158))])
-    pygame.draw.rect(screen, BLACK, scaled_rect(18, 194, 29, 22), max(2, round(2 * scale)))
-    pygame.draw.circle(screen, BLACK, tuple(map(round, to_screen((32, 219)))), max(2, round(5 * scale)))
-    pygame.draw.circle(screen, BLUE, tuple(map(round, to_screen((32, 264)))), max(3, round(13 * scale)), max(1, round(2 * scale)))
-    pygame.draw.arc(screen, RED, scaled_rect(18, 250, 28, 28), 0, math.pi, max(1, round(2 * scale)))
-    pygame.draw.line(screen, BLACK, to_screen((15, 303)), to_screen((48, 322)), max(2, round(3 * scale)))
-    pygame.draw.polygon(screen, BLACK, [to_screen((48, 322)), to_screen((40, 312)), to_screen((39, 320))])
-    pygame.draw.circle(screen, BLUE, tuple(map(round, to_screen((27, 369)))), max(3, round(12 * scale)))
-    pygame.draw.circle(screen, GREEN, tuple(map(round, to_screen((39, 371)))), max(2, round(5 * scale)))
 
     # Start/stop in the top row; mass and speed fields are grouped by body below.
     draw_button(start_rect, "Start", GREEN)
@@ -385,7 +398,7 @@ while running:
     draw_text("units", (518, 44), 9, color=GRAY)
 
     previous_clip = screen.get_clip()
-    screen.set_clip(scaled_rect(75, 71, 525, 329))
+    screen.set_clip(scaled_rect(3, 71, 597, 329))
 
     for body in bodies:
         if len(body["trail"]) > 1:
@@ -408,7 +421,7 @@ while running:
     screen.set_clip(previous_clip)
 
     if status_message:
-        draw_text(status_message, (83, 74), 10, RED)
+        draw_text(status_message, (11, 74), 10, RED)
 
     pygame.display.flip()
 
