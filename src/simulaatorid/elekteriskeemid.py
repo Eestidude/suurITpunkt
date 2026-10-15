@@ -8,8 +8,11 @@ pygame.init()
 # AKEN
 # =========================================================
 
-WIDTH = 1000
-HEIGHT = 650
+WIDTH = 1200
+HEIGHT = 760
+
+SIDEBAR_WIDTH = 310
+CANVAS_WIDTH = WIDTH - SIDEBAR_WIDTH
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Elektriskeemi koostaja")
@@ -22,36 +25,42 @@ clock = pygame.time.Clock()
 # =========================================================
 
 VALGE = (255, 255, 255)
-MUST = (0, 0, 0)
+MUST = (26, 39, 48)
 
-HALL = (190, 190, 190)
-HELE_HALL = (230, 230, 230)
+HALL = (238, 243, 245)
+HELE_HALL = (248, 250, 251)
 
-ROHELINE = (40, 190, 70)
-HELE_ROHELINE = (190, 255, 200)
+ROHELINE = (20, 166, 112)
+HELE_ROHELINE = (220, 246, 235)
 
-PUNANE = (230, 70, 70)
-HELE_PUNANE = (255, 190, 190)
+PUNANE = (205, 75, 72)
+HELE_PUNANE = (255, 232, 229)
 
 KOLLANE = (255, 220, 0)
 HELE_KOLLANE = (255, 245, 80)
 
-SININE = (60, 150, 255)
+SININE = (50, 126, 171)
+TUMEPANEEL = (26, 40, 49)
+PANEELI_TEKS = (224, 235, 238)
+PANEELI_VAIKNE = (150, 171, 179)
+RUUDUSTIK = (229, 236, 239)
 
 
 # =========================================================
 # FONDID
 # =========================================================
 
-font = pygame.font.SysFont(None, 23)
-väike_font = pygame.font.SysFont(None, 18)
+font = pygame.font.SysFont("segoeui", 22)
+väike_font = pygame.font.SysFont("segoeui", 16)
+pealkirja_font = pygame.font.SysFont("segoeui", 25, bold=True)
+arvu_font = pygame.font.SysFont("segoeui", 29, bold=True)
 
 
 # =========================================================
 # SEADISTUSED
 # =========================================================
 
-RIBA_KÕRGUS = 60
+RIBA_KÕRGUS = 72
 
 DETAILI_LAIUS = 60
 DETAILI_KÕRGUS = 40
@@ -60,6 +69,10 @@ JUHTME_PIKKUS = 90
 
 ÜHENDUSE_KAUGUS = 25
 KONTAKTI_KAUGUS = 14
+
+ALLIKA_SISETAKISTUS = 0.5
+LAMBIPIRNI_MIN_VOIMSUS = 0.025
+LAMBIPIRNI_PLOKIMISPIIR = 1.5
 
 
 # =========================================================
@@ -161,6 +174,13 @@ class Detail:
         self.y = y
 
         self.nurk = 0
+        self.takistus = 100.0
+        self.pinge = 9.0
+        self.nominaalvõimsus = 0.25
+        self.läbi_põlenud = False
+
+        if tüüp == "lamp":
+            self.takistus = 20.0
 
 
         # -------------------------------------------------
@@ -338,7 +358,8 @@ class Detail:
         self,
         pind,
         valitud=False,
-        lamp_põleb=False
+        lamp_põleb=False,
+        lamp_läbi_põlenud=False
     ):
 
         kontaktid = self.kontaktid()
@@ -507,6 +528,20 @@ class Detail:
                 )
             )
 
+            väärtuse_tekst = väike_font.render(
+                f"{self.takistus:g} Ω",
+                True,
+                MUST
+            )
+
+            pind.blit(
+                väärtuse_tekst,
+                (
+                    self.x - väärtuse_tekst.get_width() / 2,
+                    self.y + 23
+                )
+            )
+
 
         # =================================================
         # LAMP
@@ -514,7 +549,11 @@ class Detail:
 
         elif self.tüüp == "lamp":
 
-            if lamp_põleb:
+            if lamp_läbi_põlenud:
+
+                värv = (188, 193, 194)
+
+            elif lamp_põleb:
 
                 värv = HELE_KOLLANE
 
@@ -545,6 +584,25 @@ class Detail:
             )
 
 
+            if lamp_läbi_põlenud:
+
+                pygame.draw.line(
+                    pind,
+                    PUNANE,
+                    (self.x - 10, self.y - 10),
+                    (self.x + 10, self.y + 10),
+                    3
+                )
+
+                pygame.draw.line(
+                    pind,
+                    PUNANE,
+                    (self.x + 10, self.y - 10),
+                    (self.x - 10, self.y + 10),
+                    3
+                )
+
+
             rad = math.radians(
                 self.nurk
             )
@@ -568,6 +626,20 @@ class Detail:
                     self.y + dy
                 ),
                 2
+            )
+
+            väärtuse_tekst = väike_font.render(
+                f"{self.takistus:g} Ω",
+                True,
+                MUST
+            )
+
+            pind.blit(
+                väärtuse_tekst,
+                (
+                    self.x - väärtuse_tekst.get_width() / 2,
+                    self.y + 23
+                )
             )
 
             pygame.draw.line(
@@ -650,6 +722,20 @@ class Detail:
                 p1,
                 p2,
                 3
+            )
+
+            väärtuse_tekst = väike_font.render(
+                f"{self.pinge:g} V",
+                True,
+                MUST
+            )
+
+            pind.blit(
+                väärtuse_tekst,
+                (
+                    self.x - väärtuse_tekst.get_width() / 2,
+                    self.y + 22
+                )
             )
 
 
@@ -920,287 +1006,332 @@ def ühenda_juhtme_ots(
 
 
 # =========================================================
-# KAS KAKS DETAILI ON ÜHENDATUD
+# AHELA ARVUTAMINE
 # =========================================================
 
-def on_ühendatud(
-    detail1,
-    detail2
-):
+def lahenda_võrrandisüsteem(maatriks, tulemused):
 
-    for a in detail1.kontaktid():
+    suurus = len(tulemused)
 
-        for b in detail2.kontaktid():
+    for veerg in range(suurus):
 
-            if kaugus(
-                a,
-                b
-            ) <= 4:
+        pivot = max(
+            range(veerg, suurus),
+            key=lambda rida: abs(maatriks[rida][veerg])
+        )
 
-                return True
+        if abs(maatriks[pivot][veerg]) < 1e-12:
+            return None
+
+        maatriks[veerg], maatriks[pivot] = maatriks[pivot], maatriks[veerg]
+        tulemused[veerg], tulemused[pivot] = tulemused[pivot], tulemused[veerg]
+
+        jagaja = maatriks[veerg][veerg]
+
+        for kirje in range(veerg, suurus):
+            maatriks[veerg][kirje] /= jagaja
+
+        tulemused[veerg] /= jagaja
+
+        for rida in range(veerg + 1, suurus):
+
+            kordaja = maatriks[rida][veerg]
+
+            if kordaja == 0:
+                continue
+
+            for kirje in range(veerg, suurus):
+                maatriks[rida][kirje] -= kordaja * maatriks[veerg][kirje]
+
+            tulemused[rida] -= kordaja * tulemused[veerg]
+
+    vastus = [0.0] * suurus
+
+    for rida in range(suurus - 1, -1, -1):
+
+        vastus[rida] = tulemused[rida] - sum(
+            maatriks[rida][veerg] * vastus[veerg]
+            for veerg in range(rida + 1, suurus)
+        )
+
+    return vastus
 
 
-    return False
+def lahenda_ahel(allikas):
 
+    kontaktide_arv = len(detailid) * 2
+    vanem = list(range(kontaktide_arv))
 
-# =========================================================
-# GRAAF
-# =========================================================
+    def leia(indeks):
 
-def ehita_graaf():
+        while vanem[indeks] != indeks:
+            vanem[indeks] = vanem[vanem[indeks]]
+            indeks = vanem[indeks]
 
-    graaf = {}
+        return indeks
 
-    for detail in detailid:
+    def ühenda(a, b):
 
-        graaf[detail] = []
+        juur_a = leia(a)
+        juur_b = leia(b)
 
+        if juur_a != juur_b:
+            vanem[juur_b] = juur_a
 
-    for i in range(
-        len(detailid)
-    ):
+    kontaktipunktid = [
+        kontakt
+        for detail in detailid
+        for kontakt in detail.kontaktid()
+    ]
 
-        for j in range(
-            i + 1,
-            len(detailid)
-        ):
+    for i, punkt_a in enumerate(kontaktipunktid):
 
-            a = detailid[i]
-            b = detailid[j]
+        for j in range(i + 1, kontaktide_arv):
 
+            punkt_b = kontaktipunktid[j]
 
-            if on_ühendatud(
-                a,
-                b
+            if (
+                (punkt_a[0] - punkt_b[0]) ** 2
+                + (punkt_a[1] - punkt_b[1]) ** 2
+                <= 16
             ):
 
-                graaf[a].append(b)
-                graaf[b].append(a)
+                ühenda(i, j)
 
-
-    return graaf
-
-
-# =========================================================
-# AHELA KONTROLL
-# =========================================================
-
-def kas_ahel_on_korras():
-
-    allikas = None
-    lamp = None
-    takisti = None
-
-
-    for detail in detailid:
-
-        if detail.tüüp == "vooluallikas":
-
-            allikas = detail
-
-        elif detail.tüüp == "lamp":
-
-            lamp = detail
-
-        elif detail.tüüp == "takisti":
-
-            takisti = detail
-
-
-    if allikas is None:
-        return False
-
-    if lamp is None:
-        return False
-
-    if takisti is None:
-        return False
-
-
-    # Vajame vähemalt ühte juhet.
-
-    on_juhe = False
-
-    for detail in detailid:
+    for indeks, detail in enumerate(detailid):
 
         if detail.tüüp == "juhe":
+            ühenda(indeks * 2, indeks * 2 + 1)
 
-            on_juhe = True
-            break
+    allika_indeks = detailid.index(allikas) * 2
+    maandus = leia(allika_indeks)
+    positiivne = leia(allika_indeks + 1)
 
+    takistid = []
 
-    if not on_juhe:
-        return False
+    for indeks, detail in enumerate(detailid):
 
+        if detail.tüüp not in ("takisti", "lamp"):
+            continue
 
-    graaf = ehita_graaf()
+        if detail.tüüp == "lamp" and detail.läbi_põlenud:
+            continue
 
+        if detail.takistus <= 0:
+            continue
 
-    # -----------------------------------------------------
-    # Otsime kõik allikast ühendatud detailid.
-    # -----------------------------------------------------
+        takistid.append(
+            (
+                leia(indeks * 2),
+                leia(indeks * 2 + 1),
+                detail.takistus,
+                detail
+            )
+        )
 
-    nähtud = set()
+    ühendused = {}
 
-    järjekord = [allikas]
+    for a, b, _, detail in takistid:
 
+        if a == b:
+            continue
+
+        ühendused.setdefault(a, []).append((b, detail))
+        ühendused.setdefault(b, []).append((a, detail))
+
+    nähtud = {positiivne}
+    järjekord = [positiivne]
 
     while järjekord:
 
         praegune = järjekord.pop()
 
-
-        if praegune in nähtud:
-            continue
-
-
-        nähtud.add(
-            praegune
-        )
-
-
-        for järgmine in graaf[praegune]:
+        for järgmine, _ in ühendused.get(praegune, ()):
 
             if järgmine not in nähtud:
+                nähtud.add(järgmine)
+                järjekord.append(järgmine)
 
-                järjekord.append(
-                    järgmine
-                )
+    suletud = maandus in nähtud
 
+    if not suletud:
 
-    if lamp not in nähtud:
-        return False
+        return {
+            "suletud": False,
+            "lühis": False,
+            "pinge": allikas.pinge,
+            "takistus": math.inf,
+            "vool": 0.0,
+            "lambi_võimsused": {},
+        }
 
-    if takisti not in nähtud:
-        return False
+    if positiivne == maandus:
 
+        return {
+            "suletud": True,
+            "lühis": True,
+            "pinge": 0.0,
+            "takistus": 0.0,
+            "vool": allikas.pinge / ALLIKA_SISETAKISTUS,
+            "lambi_võimsused": {
+                detail: 0.0
+                for detail in detailid
+                if detail.tüüp == "lamp"
+            },
+        }
 
-    # -----------------------------------------------------
-    # Kontrollime, et allika mõlemad otsad on kasutuses.
-    # -----------------------------------------------------
+    tundmatud = [sõlm for sõlm in nähtud if sõlm != maandus]
+    indeksid = {sõlm: indeks for indeks, sõlm in enumerate(tundmatud)}
+    maatriks = [
+        [0.0] * len(tundmatud)
+        for _ in tundmatud
+    ]
+    tulemused = [0.0] * len(tundmatud)
 
-    allika_kontaktid = (
-        allikas.kontaktid()
+    def lisa_takisti(sõlm_a, sõlm_b, takistus, fikseeritud_pinge=0.0):
+
+        juhtivus = 1.0 / takistus
+        indeks_a = indeksid.get(sõlm_a)
+        indeks_b = indeksid.get(sõlm_b)
+
+        if indeks_a is not None:
+            maatriks[indeks_a][indeks_a] += juhtivus
+
+            if indeks_b is not None:
+                maatriks[indeks_a][indeks_b] -= juhtivus
+            else:
+                tulemused[indeks_a] += juhtivus * fikseeritud_pinge
+
+        if indeks_b is not None:
+            maatriks[indeks_b][indeks_b] += juhtivus
+
+            if indeks_a is not None:
+                maatriks[indeks_b][indeks_a] -= juhtivus
+            else:
+                tulemused[indeks_b] += juhtivus * fikseeritud_pinge
+
+    for a, b, takistus, _ in takistid:
+
+        if a in nähtud and b in nähtud:
+            lisa_takisti(a, b, takistus)
+
+    lisa_takisti(
+        positiivne,
+        None,
+        ALLIKA_SISETAKISTUS,
+        allikas.pinge
     )
 
+    pinged = lahenda_võrrandisüsteem(maatriks, tulemused)
 
-    esimese_kontakti_detailid = []
+    if pinged is None:
 
-    teise_kontakti_detailid = []
+        return {
+            "suletud": False,
+            "lühis": False,
+            "pinge": allikas.pinge,
+            "takistus": math.inf,
+            "vool": 0.0,
+            "lambi_võimsused": {},
+        }
 
+    sõlme_pinged = {maandus: 0.0}
+    sõlme_pinged.update(
+        (sõlm, pinged[indeks])
+        for sõlm, indeks in indeksid.items()
+    )
 
-    for detail in detailid:
+    lambi_võimsused = {}
 
-        if detail is allikas:
-            continue
+    for a, b, takistus, detail in takistid:
 
+        if detail.tüüp == "lamp":
 
-        for kontakt in detail.kontaktid():
+            pinge = sõlme_pinged.get(a, 0.0) - sõlme_pinged.get(b, 0.0)
+            lambi_võimsused[detail] = pinge * pinge / takistus
 
-            if kaugus(
-                allika_kontaktid[0],
-                kontakt
-            ) <= 4:
+    klemmipinge = max(0.0, sõlme_pinged.get(positiivne, 0.0))
+    vool = max(0.0, (allikas.pinge - klemmipinge) / ALLIKA_SISETAKISTUS)
+    ekvivalenttakistus = (
+        klemmipinge / vool
+        if vool > 1e-12
+        else math.inf
+    )
 
-                esimese_kontakti_detailid.append(
-                    detail
-                )
-
-
-            if kaugus(
-                allika_kontaktid[1],
-                kontakt
-            ) <= 4:
-
-                teise_kontakti_detailid.append(
-                    detail
-                )
-
-
-    if not esimese_kontakti_detailid:
-        return False
-
-    if not teise_kontakti_detailid:
-        return False
-
-
-    # -----------------------------------------------------
-    # Kontrollime teed ühelt allika otsalt teisele.
-    # -----------------------------------------------------
-
-    for algus in esimese_kontakti_detailid:
-
-        järjekord = [
-            (
-                algus,
-                algus is lamp,
-                algus is takisti
-            )
-        ]
-
-        külastatud = set()
+    return {
+        "suletud": True,
+        "lühis": False,
+        "pinge": klemmipinge,
+        "takistus": ekvivalenttakistus,
+        "vool": vool,
+        "lambi_võimsused": lambi_võimsused,
+    }
 
 
-        while järjekord:
+def simuleeri_ahel():
 
-            praegune, lamp_leitud, takisti_leitud = (
-                järjekord.pop()
-            )
+    allikad = [
+        detail
+        for detail in detailid
+        if detail.tüüp == "vooluallikas"
+    ]
+    lambid = [
+        detail
+        for detail in detailid
+        if detail.tüüp == "lamp"
+    ]
 
+    if not allikad:
 
-            lamp_nüüd = (
-                lamp_leitud
-                or
-                praegune is lamp
-            )
+        tulemus = {
+            "suletud": False,
+            "lühis": False,
+            "pinge": 0.0,
+            "takistus": math.inf,
+            "vool": 0.0,
+            "lambi_võimsused": {},
+        }
 
+    else:
 
-            takisti_nüüd = (
-                takisti_leitud
-                or
-                praegune is takisti
-            )
+        while True:
 
+            tulemus = lahenda_ahel(allikad[0])
 
-            võti = (
-                praegune,
-                lamp_nüüd,
-                takisti_nüüd
-            )
-
-
-            if võti in külastatud:
-                continue
-
-
-            külastatud.add(
-                võti
-            )
-
-
-            if praegune in teise_kontakti_detailid:
-
+            plahvatanud = [
+                lamp
+                for lamp in lambid
                 if (
-                    lamp_nüüd
-                    and
-                    takisti_nüüd
-                ):
-
-                    return True
-
-
-            for järgmine in graaf[praegune]:
-
-                järjekord.append(
-                    (
-                        järgmine,
-                        lamp_nüüd,
-                        takisti_nüüd
-                    )
+                    not lamp.läbi_põlenud
+                    and tulemus["lambi_võimsused"].get(lamp, 0.0)
+                    > lamp.nominaalvõimsus * LAMBIPIRNI_PLOKIMISPIIR
                 )
+            ]
 
+            if not plahvatanud:
+                break
 
-    return False
+            for lamp in plahvatanud:
+                lamp.läbi_põlenud = True
+
+    lambi_võimsus = max(
+        tulemus["lambi_võimsused"].values(),
+        default=0.0
+    )
+
+    tulemus["lambi_võimsus"] = lambi_võimsus
+    tulemus["lambid_läbi"] = any(lamp.läbi_põlenud for lamp in lambid)
+    tulemus["lambid_põlevad"] = {
+        lamp: (
+            not lamp.läbi_põlenud
+            and tulemus["lambi_võimsused"].get(lamp, 0.0)
+            >= LAMBIPIRNI_MIN_VOIMSUS
+        )
+        for lamp in lambid
+    }
+    tulemus["lamp_põleb"] = any(tulemus["lambid_põlevad"].values())
+
+    return tulemus
 
 
 # =========================================================
@@ -1247,10 +1378,10 @@ nupud = [
     (
         "takisti",
         pygame.Rect(
-            10,
-            10,
-            110,
-            40
+            14,
+            14,
+            108,
+            44
         ),
         "Takisti"
     ),
@@ -1258,10 +1389,10 @@ nupud = [
     (
         "lamp",
         pygame.Rect(
-            125,
-            10,
-            100,
-            40
+            130,
+            14,
+            96,
+            44
         ),
         "Lamp"
     ),
@@ -1269,10 +1400,10 @@ nupud = [
     (
         "vooluallikas",
         pygame.Rect(
-            230,
-            10,
-            140,
-            40
+            234,
+            14,
+            146,
+            44
         ),
         "Vooluallikas"
     ),
@@ -1280,10 +1411,10 @@ nupud = [
     (
         "juhe",
         pygame.Rect(
-            375,
-            10,
-            90,
-            40
+            388,
+            14,
+            92,
+            44
         ),
         "Juhe"
     )
@@ -1291,10 +1422,24 @@ nupud = [
 
 
 kustuta_nupp = pygame.Rect(
-    475,
-    10,
-    100,
-    40
+    488,
+    14,
+    98,
+    44
+)
+
+tagasi_nupp = pygame.Rect(
+    594,
+    14,
+    94,
+    44
+)
+
+omaduse_väli = pygame.Rect(
+    CANVAS_WIDTH + 22,
+    468,
+    SIDEBAR_WIDTH - 44,
+    46
 )
 
 
@@ -1321,6 +1466,13 @@ lohistamise_tüüp = None
 nihke_x = 0
 nihke_y = 0
 
+muudetav_väli = None
+välja_tekst = ""
+sisendi_viga = False
+asenda_väli = False
+simulatsioon_vajab_uuendust = True
+simulatsiooni_tulemus = None
+
 
 # =========================================================
 # PEAMINE TSÜKKEL
@@ -1337,6 +1489,15 @@ while töötab:
 
     for event in pygame.event.get():
 
+        if event.type in (
+            pygame.KEYDOWN,
+            pygame.MOUSEBUTTONDOWN,
+            pygame.MOUSEBUTTONUP,
+            pygame.MOUSEMOTION
+        ):
+
+            simulatsioon_vajab_uuendust = True
+
         # =================================================
         # SULGEMINE
         # =================================================
@@ -1352,7 +1513,82 @@ while töötab:
 
         elif event.type == pygame.KEYDOWN:
 
-            if (
+            if muudetav_väli is not None:
+
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+
+                    try:
+
+                        uus_väärtus = float(
+                            välja_tekst.replace(",", ".")
+                        )
+
+                    except ValueError:
+
+                        uus_väärtus = 0
+
+
+                    if (
+                        math.isfinite(uus_väärtus)
+                        and uus_väärtus > 0
+                        and valitud_detail is not None
+                    ):
+
+                        salvesta()
+
+                        if muudetav_väli == "takistus":
+
+                            valitud_detail.takistus = uus_väärtus
+
+                        else:
+
+                            valitud_detail.pinge = uus_väärtus
+
+
+                        muudetav_väli = None
+                        sisendi_viga = False
+
+                    else:
+
+                        sisendi_viga = True
+                        asenda_väli = True
+
+
+                elif event.key == pygame.K_BACKSPACE:
+
+                    if asenda_väli:
+
+                        välja_tekst = ""
+
+                    else:
+
+                        välja_tekst = välja_tekst[:-1]
+
+                    asenda_väli = False
+                    sisendi_viga = False
+
+
+                elif event.key == pygame.K_ESCAPE:
+
+                    muudetav_väli = None
+                    sisendi_viga = False
+
+
+                elif event.unicode in "0123456789.," and len(välja_tekst) < 14:
+
+                    if asenda_väli:
+
+                        välja_tekst = event.unicode
+
+                    else:
+
+                        välja_tekst += event.unicode
+
+                    asenda_väli = False
+                    sisendi_viga = False
+
+
+            elif (
                 event.key == pygame.K_z
                 and
                 event.mod & pygame.KMOD_CTRL
@@ -1377,6 +1613,31 @@ while töötab:
             if event.button == 1:
 
                 nuppudele_vajutus = False
+                muudetav_väli = None
+
+
+                if mx >= CANVAS_WIDTH:
+
+                    nuppudele_vajutus = True
+
+                    if (
+                        omaduse_väli.collidepoint(mx, my)
+                        and valitud_detail is not None
+                        and valitud_detail.tüüp in ("takisti", "lamp", "vooluallikas")
+                    ):
+
+                        if valitud_detail.tüüp in ("takisti", "lamp"):
+
+                            muudetav_väli = "takistus"
+                            välja_tekst = f"{valitud_detail.takistus:g}"
+
+                        else:
+
+                            muudetav_väli = "pinge"
+                            välja_tekst = f"{valitud_detail.pinge:g}"
+
+                        asenda_väli = True
+                        sisendi_viga = False
 
 
                 # =================================================
@@ -1443,6 +1704,12 @@ while töötab:
                         valitud_detail = None
 
 
+                if tagasi_nupp.collidepoint(mx, my):
+
+                    nuppudele_vajutus = True
+                    tagasi()
+
+
                 # =================================================
                 # TÖÖALA
                 # =================================================
@@ -1455,7 +1722,7 @@ while töötab:
 
                     if käes_olev is not None:
 
-                        if my > RIBA_KÕRGUS:
+                        if my > RIBA_KÕRGUS and mx < CANVAS_WIDTH:
 
                             salvesta()
 
@@ -2064,10 +2331,17 @@ while töötab:
 
 
     # =========================================================
-    # LAMBI KONTROLL
+    # AHELA SIMULATSIOON
     # =========================================================
 
-    lamp_põleb = kas_ahel_on_korras()
+    if simulatsioon_vajab_uuendust:
+
+        simulatsiooni_tulemus = simuleeri_ahel()
+        simulatsioon_vajab_uuendust = False
+
+
+    lamp_põleb = simulatsiooni_tulemus["lamp_põleb"]
+    lamp_läbi_põlenud = simulatsiooni_tulemus["lambid_läbi"]
 
 
     # =========================================================
@@ -2075,8 +2349,37 @@ while töötab:
     # =========================================================
 
     screen.fill(
-        VALGE
+        HELE_HALL
     )
+
+
+    pygame.draw.rect(
+        screen,
+        VALGE,
+        (0, RIBA_KÕRGUS, CANVAS_WIDTH, HEIGHT - RIBA_KÕRGUS)
+    )
+
+
+    for grid_x in range(12, CANVAS_WIDTH, 24):
+
+        pygame.draw.line(
+            screen,
+            RUUDUSTIK,
+            (grid_x, RIBA_KÕRGUS),
+            (grid_x, HEIGHT),
+            1
+        )
+
+
+    for grid_y in range(RIBA_KÕRGUS + 12, HEIGHT, 24):
+
+        pygame.draw.line(
+            screen,
+            RUUDUSTIK,
+            (0, grid_y),
+            (CANVAS_WIDTH, grid_y),
+            1
+        )
 
 
     # =========================================================
@@ -2089,9 +2392,18 @@ while töötab:
         (
             0,
             0,
-            WIDTH,
+            CANVAS_WIDTH,
             RIBA_KÕRGUS
         )
+    )
+
+
+    pygame.draw.line(
+        screen,
+        (216, 226, 230),
+        (0, RIBA_KÕRGUS - 1),
+        (CANVAS_WIDTH, RIBA_KÕRGUS - 1),
+        1
     )
 
 
@@ -2101,27 +2413,33 @@ while töötab:
 
     for tüüp, rect, nimi in nupud:
 
+        hiirel = rect.collidepoint(pygame.mouse.get_pos())
+
         if valitud_tüüp == tüüp:
 
-            värv = HELE_ROHELINE
+            taustavärv = HELE_ROHELINE
+            äärevärv = ROHELINE
 
         else:
 
-            värv = VALGE
+            taustavärv = VALGE if not hiirel else (232, 241, 244)
+            äärevärv = (194, 208, 214)
 
 
         pygame.draw.rect(
             screen,
-            värv,
-            rect
+            taustavärv,
+            rect,
+            border_radius=8
         )
 
 
         pygame.draw.rect(
             screen,
-            MUST,
+            äärevärv,
             rect,
-            2
+            1,
+            border_radius=8
         )
 
 
@@ -2160,15 +2478,17 @@ while töötab:
     pygame.draw.rect(
         screen,
         kustuta_värv,
-        kustuta_nupp
+        kustuta_nupp,
+        border_radius=8
     )
 
 
     pygame.draw.rect(
         screen,
-        MUST,
+        PUNANE if valitud_detail is not None else (194, 208, 214),
         kustuta_nupp,
-        2
+        1,
+        border_radius=8
     )
 
 
@@ -2191,79 +2511,217 @@ while töötab:
     )
 
 
-    # =========================================================
-    # AHELA OLEK
-    # =========================================================
-
-    if lamp_põleb:
-
-        olek = "AHEL ON SULETUD"
-        oleku_värv = (20, 140, 40)
-
-    else:
-
-        olek = "AHEL ON AVATUD"
-        oleku_värv = (190, 40, 40)
-
-
-    tekst = font.render(
-        olek,
-        True,
-        oleku_värv
+    pygame.draw.rect(
+        screen,
+        VALGE,
+        tagasi_nupp,
+        border_radius=8
     )
 
+    pygame.draw.rect(
+        screen,
+        (194, 208, 214),
+        tagasi_nupp,
+        1,
+        border_radius=8
+    )
 
+    tekst = font.render("Undo", True, MUST)
     screen.blit(
         tekst,
         (
-            600,
-            8
+            tagasi_nupp.centerx - tekst.get_width() / 2,
+            tagasi_nupp.centery - tekst.get_height() / 2
         )
     )
 
 
-    # =========================================================
-    # JUHISED
-    # =========================================================
+    pinge = simulatsiooni_tulemus["pinge"]
+    vool = simulatsiooni_tulemus["vool"]
+    takistus = simulatsiooni_tulemus["takistus"]
+    lambi_võimsus = simulatsiooni_tulemus["lambi_võimsus"]
 
-    if käes_olev is not None:
+    pygame.draw.rect(
+        screen,
+        TUMEPANEEL,
+        (CANVAS_WIDTH, 0, SIDEBAR_WIDTH, HEIGHT)
+    )
 
-        juhend = (
-            "Detail on käes | "
-            "Vasak hiir: aseta | "
-            "Parem hiir: pööra 90°"
-        )
+    pygame.draw.line(
+        screen,
+        (52, 72, 81),
+        (CANVAS_WIDTH, 0),
+        (CANVAS_WIDTH, HEIGHT),
+        1
+    )
 
-    elif valitud_detail is not None:
+    paneeli_x = CANVAS_WIDTH + 24
 
-        juhend = (
-            "Lohista detaili | "
-            "Juhtme otsa lohistades venitad juhet | "
-            "Parem hiir: pööra"
-        )
+    tekst = väike_font.render("ELEKTRISKEEM", True, PANEELI_VAIKNE)
+    screen.blit(tekst, (paneeli_x, 20))
+
+    tekst = pealkirja_font.render("Mõõteriistad", True, PANEELI_TEKS)
+    screen.blit(tekst, (paneeli_x, 39))
+
+    oleku_riba = pygame.Rect(paneeli_x, 86, SIDEBAR_WIDTH - 48, 38)
+    if lamp_läbi_põlenud:
+
+        olek = "PIRN LÄBI PÕLENUD"
+        oleku_värv = (111, 58, 57)
+
+    elif lamp_põleb:
+
+        olek = "PIRN PÕLEB"
+        oleku_värv = (31, 111, 82)
+
+    elif simulatsiooni_tulemus["suletud"]:
+
+        olek = "VOOL LIIGA VÄIKE"
+        oleku_värv = (119, 91, 42)
 
     else:
 
-        juhend = (
-            "Vali detail | "
-            "Ctrl+Z: samm tagasi | "
-            "Kustuta: eemalda valitud detail"
+        olek = "AHEL AVATUD"
+        oleku_värv = (111, 58, 57)
+
+
+    pygame.draw.rect(screen, oleku_värv, oleku_riba, border_radius=7)
+
+    oleku_tekst = font.render(olek, True, VALGE)
+    screen.blit(
+        oleku_tekst,
+        (
+            oleku_riba.centerx - oleku_tekst.get_width() / 2,
+            oleku_riba.centery - oleku_tekst.get_height() / 2
         )
-
-
-    tekst = väike_font.render(
-        juhend,
-        True,
-        MUST
     )
 
+    takistuse_tekst = (
+        f"{takistus:.3g} Ω"
+        if math.isfinite(takistus)
+        else "∞ Ω"
+    )
+
+    mõõdikud = [
+        ("LAMBI KLEMMIPINGE", f"{pinge:.3g} V"),
+        ("EKVIVALENTTAKISTUS", takistuse_tekst),
+        ("VOOL", f"{vool:.3g} A"),
+        ("LAMBI VÕIMSUS", f"{lambi_võimsus:.3g} W")
+    ]
+
+    for indeks, (silt, väärtus) in enumerate(mõõdikud):
+
+        y = 143 + indeks * 58
+        screen.blit(
+            väike_font.render(silt, True, PANEELI_VAIKNE),
+            (paneeli_x, y)
+        )
+        screen.blit(
+            arvu_font.render(väärtus, True, PANEELI_TEKS),
+            (paneeli_x, y + 17)
+        )
+
+        if indeks < len(mõõdikud) - 1:
+
+            pygame.draw.line(
+                screen,
+                (52, 72, 81),
+                (paneeli_x, y + 51),
+                (WIDTH - 24, y + 51),
+                1
+            )
+
+
+    pygame.draw.line(
+        screen,
+        (52, 72, 81),
+        (paneeli_x, 386),
+        (WIDTH - 24, 386),
+        1
+    )
 
     screen.blit(
-        tekst,
-        (
-            600,
-            37
+        pealkirja_font.render("Detaili väärtus", True, PANEELI_TEKS),
+        (paneeli_x, 398)
+    )
+
+    if valitud_detail is not None and valitud_detail.tüüp == "takisti":
+
+        välja_silt = "TAKISTUS"
+        välja_väärtus = f"{valitud_detail.takistus:g}"
+        ühik = "Ω"
+
+    elif valitud_detail is not None and valitud_detail.tüüp == "lamp":
+
+        välja_silt = "LAMBI TAKISTUS"
+        välja_väärtus = f"{valitud_detail.takistus:g}"
+        ühik = "Ω"
+
+    elif valitud_detail is not None and valitud_detail.tüüp == "vooluallikas":
+
+        välja_silt = "ALLIKA PINGE"
+        välja_väärtus = f"{valitud_detail.pinge:g}"
+        ühik = "V"
+
+    else:
+
+        välja_silt = "VALI TAKISTI, LAMP VÕI ALLIKAS"
+        välja_väärtus = ""
+        ühik = ""
+
+    screen.blit(
+        väike_font.render(välja_silt, True, PANEELI_VAIKNE),
+        (paneeli_x, 435)
+    )
+
+    välja_ääre = PUNANE if sisendi_viga else ROHELINE if muudetav_väli else (74, 96, 104)
+    välja_taust = (35, 53, 62) if välja_väärtus else (31, 45, 53)
+    pygame.draw.rect(screen, välja_taust, omaduse_väli, border_radius=7)
+    pygame.draw.rect(screen, välja_ääre, omaduse_väli, 2 if muudetav_väli else 1, border_radius=7)
+
+    kuvatav_väärtus = välja_tekst if muudetav_väli else välja_väärtus
+    väärtuse_tekst = font.render(kuvatav_väärtus, True, PANEELI_TEKS)
+    screen.blit(
+        väärtuse_tekst,
+        (omaduse_väli.x + 13, omaduse_väli.centery - väärtuse_tekst.get_height() / 2)
+    )
+
+    ühiku_tekst = font.render(ühik, True, PANEELI_VAIKNE)
+    screen.blit(
+        ühiku_tekst,
+        (omaduse_väli.right - ühiku_tekst.get_width() - 13,
+         omaduse_väli.centery - ühiku_tekst.get_height() / 2)
+    )
+
+    kui_tekst = "Vajuta Enter, et rakendada" if muudetav_väli else "Klõpsa väärtusel muutmiseks"
+    screen.blit(
+        väike_font.render(kui_tekst, True, PANEELI_VAIKNE),
+        (paneeli_x, 520)
+    )
+
+    if sisendi_viga:
+
+        screen.blit(
+            väike_font.render("Sisesta arv, mis on suurem kui 0", True, (255, 145, 135)),
+            (paneeli_x, 542)
         )
+
+    pygame.draw.line(
+        screen,
+        (52, 72, 81),
+        (paneeli_x, HEIGHT - 82),
+        (WIDTH - 24, HEIGHT - 82),
+        1
+    )
+
+    screen.blit(
+        väike_font.render("Ctrl+Z  Samm tagasi", True, PANEELI_VAIKNE),
+        (paneeli_x, HEIGHT - 62)
+    )
+
+    screen.blit(
+        väike_font.render("Parema klahviga pööra detaili", True, PANEELI_VAIKNE),
+        (paneeli_x, HEIGHT - 38)
     )
 
 
@@ -2271,12 +2729,22 @@ while töötab:
     # LAUAL OLEVAD DETAILID
     # =========================================================
 
+    screen.set_clip(
+        pygame.Rect(
+            0,
+            RIBA_KÕRGUS,
+            CANVAS_WIDTH,
+            HEIGHT - RIBA_KÕRGUS
+        )
+    )
+
     for detail in detailid:
 
         detail.joonista(
             screen,
             detail == valitud_detail,
-            lamp_põleb
+            simulatsiooni_tulemus["lambid_põlevad"].get(detail, False),
+            detail.läbi_põlenud
         )
 
 
@@ -2289,8 +2757,12 @@ while töötab:
         käes_olev.joonista(
             screen,
             True,
+            False,
             False
         )
+
+
+    screen.set_clip(None)
 
 
     # =========================================================
