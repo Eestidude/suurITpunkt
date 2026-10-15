@@ -21,6 +21,8 @@ running = True
 
 screen = pg.display.set_mode((el,ek), pg.RESIZABLE)
 
+
+
 ''' KONSTANTID'''
 
 top_bar_height = 1/6*ek
@@ -30,7 +32,6 @@ side_bar_wdith = el/6
 font = pg.font.SysFont("Arial", 36)
 font2 = pg.font.SysFont("Arial", 72)
 tausta_värv = [230,230,230]
-
 
 
 
@@ -122,14 +123,19 @@ class Tausta_objekt:
         self.rectangle_object = rectangle_object
         self.color = color
 
-class ikoon:
-    def __init__(self, rectangle_object,color, img, text):
+class simulaatori_ikoon:
+    def __init__(self, rectangle_object, color = [240,240,240], img = "gfx/ulpimine.jpg", text = 'No Name'):
+        image = pg.image.load(img) 
         self.rectangle_object = rectangle_object
         self.color = color
-        self.img = image
+        self.image = image
         self.text = text
+        self.gfx = img
 
-        
+def joonista_sim_ikoon(ikoon):
+    todo = "yes"
+
+
 def joonista_nupp(nupp):
     tfont = pg.font.SysFont(nupp.tekst.font_name, nupp.tekst.font_size)
     size = tfont.size(nupp.tekst.tekst)
