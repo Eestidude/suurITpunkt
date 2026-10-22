@@ -2,9 +2,12 @@ import pygame as pg
 import math
 from screeninfo import get_monitors
 import sys
+from pathlib import Path
+import os 
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 pg.init()
-
+print(dir_path)
 for ekraan in get_monitors():
     ek = ekraan.height
     el = ekraan.width
@@ -100,6 +103,7 @@ def start_menu():
             joonista_tausta_objekt(objekt)
         for nupp in nuppud:
             joonista_nupp(nupp)
+        joonista_sim_ikoon(katse_ikoon)
         pg.display.flip()
 class Text:
     def __init__(self, tekst = "", font_name = "Arial", font_size = 36, color = "black", offset = (0,0)):
@@ -124,16 +128,17 @@ class Tausta_objekt:
         self.color = color
 
 class simulaatori_ikoon:
-    def __init__(self, rectangle_object, color = [240,240,240], img = "gfx/ulpimine.jpg", text = 'No Name'):
+    def __init__(self, rectangle_object, color = [240,240,240], img = "C:/Users/Omanik/Documents/GitHub/suurITpunkt/src/gfx/ulpimine.jpg", text = 'No Name'):
         image = pg.image.load(img) 
         self.rectangle_object = rectangle_object
         self.color = color
-        self.image = image
+        self.pilt = image
         self.text = text
         self.gfx = img
 
 def joonista_sim_ikoon(ikoon):
-    todo = "yes"
+    pg.draw.rect(screen, rect = ikoon.rectangle_object, color = ikoon.color)
+    screen.blit(ikoon.pilt, ikoon.rectangle_object, ikoon.rectangle_object)
 
 
 def joonista_nupp(nupp):
@@ -152,7 +157,7 @@ ava_fail_nupp = Nupp(pg.Rect(el/2-100,ek/2-50,200,100),[255,255,255],"Ava fail")
 side_bar_scroll_bar_slider = Nupp(pg.Rect(0, top_bar_height + 20, 20, 100), [210, 210, 210])
 side_bar_scroll_bar_arrow_up = Nupp(pg.Rect(0, top_bar_height, 20, 20), [210, 210, 210], Text("^", font_size = 20, offset = (0,5)))
 side_bar_scroll_bar_arrow_down = Nupp(pg.Rect(0, ek-20, 20, 20), [210, 210, 210], Text("v", font_size = 16, offset = (0, -3)))
-
+katse_ikoon = simulaatori_ikoon(pg.Rect(100, 100, 50, 100))
 '''RIBAD'''
 
 top_bar = Tausta_objekt(pg.Rect(0,0,top_bar_width, top_bar_height), [200,200,200])
