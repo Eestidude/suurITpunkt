@@ -2,7 +2,6 @@ import pygame
 import math
 import copy
 
-pygame.init()
 
 # =========================================================
 # AKEN
@@ -14,72 +13,61 @@ HEIGHT = 760
 SIDEBAR_WIDTH = 310
 CANVAS_WIDTH = WIDTH - SIDEBAR_WIDTH
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Elektriskeemi koostaja")
-
-clock = pygame.time.Clock()
-
-
 # =========================================================
 # VÄRVID
 # =========================================================
 
-VALGE = (255, 255, 255)
-MUST = (26, 39, 48)
+WHITE = (255, 255, 255)
+BLACK = (26, 39, 48)
 
-HALL = (238, 243, 245)
-HELE_HALL = (248, 250, 251)
+GRAY = (238, 243, 245)
+LIGHT_GRAY = (248, 250, 251)
 
-ROHELINE = (20, 166, 112)
-HELE_ROHELINE = (220, 246, 235)
+GREEN = (20, 166, 112)
+LIGHT_GREEN = (220, 246, 235)
 
-PUNANE = (205, 75, 72)
-HELE_PUNANE = (255, 232, 229)
+RED = (205, 75, 72)
+LIGHT_RED = (255, 232, 229)
 
-KOLLANE = (255, 220, 0)
-HELE_KOLLANE = (255, 245, 80)
+YELLOW = (255, 220, 0)
+LIGHT_YELLOW = (255, 245, 80)
 
-SININE = (50, 126, 171)
-TUMEPANEEL = (26, 40, 49)
-PANEELI_TEKS = (224, 235, 238)
-PANEELI_VAIKNE = (150, 171, 179)
-RUUDUSTIK = (229, 236, 239)
+BLUE = (50, 126, 171)
+DARK_PANEL = (26, 40, 49)
+PANEL_TEXT = (224, 235, 238)
+PANEL_MUTED = (150, 171, 179)
+GRID_COLOR = (229, 236, 239)
 
 
 # =========================================================
 # FONDID
 # =========================================================
 
-font = pygame.font.SysFont("segoeui", 22)
-väike_font = pygame.font.SysFont("segoeui", 16)
-pealkirja_font = pygame.font.SysFont("segoeui", 25, bold=True)
-arvu_font = pygame.font.SysFont("segoeui", 29, bold=True)
-
-
 # =========================================================
 # SEADISTUSED
 # =========================================================
 
-RIBA_KÕRGUS = 72
+TOOLBAR_HEIGHT = 72
 
-DETAILI_LAIUS = 60
-DETAILI_KÕRGUS = 40
+COMPONENT_WIDTH = 60
+COMPONENT_HEIGHT = 40
 
-JUHTME_PIKKUS = 90
+WIRE_LENGTH = 90
 
-ÜHENDUSE_KAUGUS = 25
-KONTAKTI_KAUGUS = 14
+SNAP_DISTANCE = 25
+TERMINAL_HIT_RADIUS = 14
 
-ALLIKA_SISETAKISTUS = 0.5
-LAMBIPIRNI_MIN_VOIMSUS = 0.025
-LAMBIPIRNI_PLOKIMISPIIR = 1.5
+CONNECTION_TOLERANCE = 4.0
+SOURCE_INTERNAL_RESISTANCE = 0.5
+BULB_MIN_POWER = 0.025
+BULB_BURNOUT_FACTOR = 1.5
 
 
 # =========================================================
 # ABIFUNKTSIOONID
 # =========================================================
 
-def kaugus(a, b):
+def distance(a, b):
 
     return math.hypot(
         a[0] - b[0],
@@ -87,32 +75,32 @@ def kaugus(a, b):
     )
 
 
-def pööra_punkt(x, y, cx, cy, nurk):
+def rotate_point(x, y, cx, cy, angle):
 
-    rad = math.radians(nurk)
+    rad = math.radians(angle)
 
     dx = x - cx
     dy = y - cy
 
-    uus_x = (
+    new_x = (
         dx * math.cos(rad)
         -
         dy * math.sin(rad)
     )
 
-    uus_y = (
+    new_y = (
         dx * math.sin(rad)
         +
         dy * math.cos(rad)
     )
 
     return (
-        cx + uus_x,
-        cy + uus_y
+        cx + new_x,
+        cy + new_y
     )
 
 
-def punkti_kaugus_lõigust(
+def point_segment_distance(
     px,
     py,
     x1,
@@ -146,12 +134,12 @@ def punkti_kaugus_lõigust(
         min(1, t)
     )
 
-    lähim_x = x1 + t * dx
-    lähim_y = y1 + t * dy
+    nearest_x = x1 + t * dx
+    nearest_y = y1 + t * dy
 
     return math.hypot(
-        px - lähim_x,
-        py - lähim_y
+        px - nearest_x,
+        py - nearest_y
     )
 
 
@@ -159,60 +147,60 @@ def punkti_kaugus_lõigust(
 # DETAIL
 # =========================================================
 
-class Detail:
+class Component:
 
     def __init__(
         self,
-        tüüp,
+        kind,
         x,
         y
     ):
 
-        self.tüüp = tüüp
+        self.kind = kind
 
         self.x = x
         self.y = y
 
-        self.nurk = 0
-        self.takistus = 100.0
-        self.pinge = 9.0
-        self.nominaalvõimsus = 0.25
-        self.läbi_põlenud = False
+        self.angle = 0
+        self.resistance = 100.0
+        self.voltage = 9.0
+        self.rated_power = 5.0
+        self.burned_out = False
 
-        if tüüp == "lamp":
-            self.takistus = 20.0
+        if kind == 'bulb':
+            self.resistance = 20.0
 
 
         # -------------------------------------------------
         # JUHE
         # -------------------------------------------------
 
-        if tüüp == "juhe":
+        if kind == 'wire':
 
-            self.algus_x = x - JUHTME_PIKKUS / 2
-            self.algus_y = y
+            self.start_x = x - WIRE_LENGTH / 2
+            self.start_y = y
 
-            self.lõpp_x = x + JUHTME_PIKKUS / 2
-            self.lõpp_y = y
+            self.end_x = x + WIRE_LENGTH / 2
+            self.end_y = y
 
 
     # =====================================================
     # JUHTME KESKPUNKT
     # =====================================================
 
-    def uuenda_keskpunkt(self):
+    def update_midpoint(self):
 
-        if self.tüüp != "juhe":
+        if self.kind != 'wire':
             return
 
         self.x = (
-            self.algus_x +
-            self.lõpp_x
+            self.start_x +
+            self.end_x
         ) / 2
 
         self.y = (
-            self.algus_y +
-            self.lõpp_y
+            self.start_y +
+            self.end_y
         ) / 2
 
 
@@ -220,34 +208,34 @@ class Detail:
     # DETAILI KONTAKTID
     # =====================================================
 
-    def kontaktid(self):
+    def terminals(self):
 
         # JUHE
 
-        if self.tüüp == "juhe":
+        if self.kind == 'wire':
 
             return [
                 (
-                    self.algus_x,
-                    self.algus_y
+                    self.start_x,
+                    self.start_y
                 ),
                 (
-                    self.lõpp_x,
-                    self.lõpp_y
+                    self.end_x,
+                    self.end_y
                 )
             ]
 
 
         # MUU DETAIL
 
-        kaugus_keskelt = DETAILI_LAIUS / 2 + 8
+        terminal_offset = COMPONENT_WIDTH / 2 + 8
 
         rad = math.radians(
-            self.nurk
+            self.angle
         )
 
-        dx = math.cos(rad) * kaugus_keskelt
-        dy = math.sin(rad) * kaugus_keskelt
+        dx = math.cos(rad) * terminal_offset
+        dy = math.sin(rad) * terminal_offset
 
         return [
             (
@@ -267,26 +255,26 @@ class Detail:
 
     def rect(self):
 
-        if self.tüüp == "juhe":
+        if self.kind == 'wire':
 
             min_x = min(
-                self.algus_x,
-                self.lõpp_x
+                self.start_x,
+                self.end_x
             )
 
             max_x = max(
-                self.algus_x,
-                self.lõpp_x
+                self.start_x,
+                self.end_x
             )
 
             min_y = min(
-                self.algus_y,
-                self.lõpp_y
+                self.start_y,
+                self.end_y
             )
 
             max_y = max(
-                self.algus_y,
-                self.lõpp_y
+                self.start_y,
+                self.end_y
             )
 
             return pygame.Rect(
@@ -308,23 +296,23 @@ class Detail:
     # KAS HIIR ON DETAILIL
     # =====================================================
 
-    def sisaldab(self, pos):
+    def contains(self, pos):
 
         mx, my = pos
 
 
         # JUHE
 
-        if self.tüüp == "juhe":
+        if self.kind == 'wire':
 
             return (
-                punkti_kaugus_lõigust(
+                point_segment_distance(
                     mx,
                     my,
-                    self.algus_x,
-                    self.algus_y,
-                    self.lõpp_x,
-                    self.lõpp_y
+                    self.start_x,
+                    self.start_y,
+                    self.end_x,
+                    self.end_y
                 )
                 <= 10
             )
@@ -332,7 +320,7 @@ class Detail:
 
         # LAMP
 
-        if self.tüüp == "lamp":
+        if self.kind == 'bulb':
 
             return (
                 math.hypot(
@@ -354,71 +342,71 @@ class Detail:
     # JOONISTAMINE
     # =====================================================
 
-    def joonista(
+    def draw(
         self,
-        pind,
-        valitud=False,
-        lamp_põleb=False,
-        lamp_läbi_põlenud=False
+        surface,
+        selected=False,
+        bulb_lit=False,
+        bulb_burned_out=False
     ):
 
-        kontaktid = self.kontaktid()
+        terminals = self.terminals()
 
 
         # =================================================
         # JUHE
         # =================================================
 
-        if self.tüüp == "juhe":
+        if self.kind == 'wire':
 
             pygame.draw.line(
-                pind,
-                MUST,
-                kontaktid[0],
-                kontaktid[1],
+                surface,
+                BLACK,
+                terminals[0],
+                terminals[1],
                 5
             )
 
             pygame.draw.circle(
-                pind,
-                MUST,
+                surface,
+                BLACK,
                 (
-                    int(kontaktid[0][0]),
-                    int(kontaktid[0][1])
+                    int(terminals[0][0]),
+                    int(terminals[0][1])
                 ),
                 3
             )
 
             pygame.draw.circle(
-                pind,
-                MUST,
+                surface,
+                BLACK,
                 (
-                    int(kontaktid[1][0]),
-                    int(kontaktid[1][1])
+                    int(terminals[1][0]),
+                    int(terminals[1][1])
                 ),
                 3
             )
 
 
-            if valitud:
+            if selected:
 
                 pygame.draw.circle(
-                    pind,
-                    ROHELINE,
+                    surface,
+                    GREEN,
                     (
-                        int(kontaktid[0][0]),
-                        int(kontaktid[0][1])
+                        int(terminals[0][0]),
+                        int(terminals[0][1])
                     ),
                     9,
                     2
                 )
 
                 pygame.draw.circle(
-                    pind,
-                    ROHELINE,
+                    surface,
+                    GREEN,
                     (
-                        int(kontaktid[1][0]),
-                        int(kontaktid[1][1])
+                        int(terminals[1][0]),
+                        int(terminals[1][1])
                     ),
                     9,
                     2
@@ -431,36 +419,36 @@ class Detail:
         # DETAILI JUHTMED
         # =================================================
 
-        vasak_keha = pööra_punkt(
-            self.x - DETAILI_LAIUS / 2,
+        body_left = rotate_point(
+            self.x - COMPONENT_WIDTH / 2,
             self.y,
             self.x,
             self.y,
-            self.nurk
+            self.angle
         )
 
-        parem_keha = pööra_punkt(
-            self.x + DETAILI_LAIUS / 2,
+        body_right = rotate_point(
+            self.x + COMPONENT_WIDTH / 2,
             self.y,
             self.x,
             self.y,
-            self.nurk
+            self.angle
         )
 
 
         pygame.draw.line(
-            pind,
-            MUST,
-            kontaktid[0],
-            vasak_keha,
+            surface,
+            BLACK,
+            terminals[0],
+            body_left,
             3
         )
 
         pygame.draw.line(
-            pind,
-            MUST,
-            parem_keha,
-            kontaktid[1],
+            surface,
+            BLACK,
+            body_right,
+            terminals[1],
             3
         )
 
@@ -469,9 +457,9 @@ class Detail:
         # TAKISTI
         # =================================================
 
-        if self.tüüp == "takisti":
+        if self.kind == 'resistor':
 
-            punktid = []
+            points = []
 
             for px, py in [
                 (-30, -18),
@@ -480,64 +468,64 @@ class Detail:
                 (-30, 18)
             ]:
 
-                punktid.append(
-                    pööra_punkt(
+                points.append(
+                    rotate_point(
                         self.x + px,
                         self.y + py,
                         self.x,
                         self.y,
-                        self.nurk
+                        self.angle
                     )
                 )
 
 
             pygame.draw.polygon(
-                pind,
-                VALGE,
-                punktid
+                surface,
+                WHITE,
+                points
             )
 
             pygame.draw.polygon(
-                pind,
-                MUST,
-                punktid,
+                surface,
+                BLACK,
+                points,
                 2
             )
 
 
-            tekst = font.render(
+            text = font.render(
                 "R",
                 True,
-                MUST
+                BLACK
             )
 
-            tekst = pygame.transform.rotate(
-                tekst,
-                -self.nurk
+            text = pygame.transform.rotate(
+                text,
+                -self.angle
             )
 
 
-            pind.blit(
-                tekst,
+            surface.blit(
+                text,
                 (
                     self.x -
-                    tekst.get_width() / 2,
+                    text.get_width() / 2,
 
                     self.y -
-                    tekst.get_height() / 2
+                    text.get_height() / 2
                 )
             )
 
-            väärtuse_tekst = väike_font.render(
-                f"{self.takistus:g} Ω",
+            value_text = small_font.render(
+                f"{self.resistance:g} Ω",
                 True,
-                MUST
+                BLACK
             )
 
-            pind.blit(
-                väärtuse_tekst,
+            surface.blit(
+                value_text,
                 (
-                    self.x - väärtuse_tekst.get_width() / 2,
+                    self.x - value_text.get_width() / 2,
                     self.y + 23
                 )
             )
@@ -547,24 +535,24 @@ class Detail:
         # LAMP
         # =================================================
 
-        elif self.tüüp == "lamp":
+        elif self.kind == 'bulb':
 
-            if lamp_läbi_põlenud:
+            if bulb_burned_out:
 
-                värv = (188, 193, 194)
+                color = (188, 193, 194)
 
-            elif lamp_põleb:
+            elif bulb_lit:
 
-                värv = HELE_KOLLANE
+                color = LIGHT_YELLOW
 
             else:
 
-                värv = VALGE
+                color = WHITE
 
 
             pygame.draw.circle(
-                pind,
-                värv,
+                surface,
+                color,
                 (
                     int(self.x),
                     int(self.y)
@@ -573,8 +561,8 @@ class Detail:
             )
 
             pygame.draw.circle(
-                pind,
-                MUST,
+                surface,
+                BLACK,
                 (
                     int(self.x),
                     int(self.y)
@@ -584,19 +572,19 @@ class Detail:
             )
 
 
-            if lamp_läbi_põlenud:
+            if bulb_burned_out:
 
                 pygame.draw.line(
-                    pind,
-                    PUNANE,
+                    surface,
+                    RED,
                     (self.x - 10, self.y - 10),
                     (self.x + 10, self.y + 10),
                     3
                 )
 
                 pygame.draw.line(
-                    pind,
-                    PUNANE,
+                    surface,
+                    RED,
                     (self.x + 10, self.y - 10),
                     (self.x - 10, self.y + 10),
                     3
@@ -604,7 +592,7 @@ class Detail:
 
 
             rad = math.radians(
-                self.nurk
+                self.angle
             )
 
             dx = math.cos(rad) * 11
@@ -615,8 +603,8 @@ class Detail:
 
 
             pygame.draw.line(
-                pind,
-                MUST,
+                surface,
+                BLACK,
                 (
                     self.x - dx,
                     self.y - dy
@@ -628,23 +616,23 @@ class Detail:
                 2
             )
 
-            väärtuse_tekst = väike_font.render(
-                f"{self.takistus:g} Ω",
+            value_text = small_font.render(
+                f"{self.resistance:g} Ω",
                 True,
-                MUST
+                BLACK
             )
 
-            pind.blit(
-                väärtuse_tekst,
+            surface.blit(
+                value_text,
                 (
-                    self.x - väärtuse_tekst.get_width() / 2,
+                    self.x - value_text.get_width() / 2,
                     self.y + 23
                 )
             )
 
             pygame.draw.line(
-                pind,
-                MUST,
+                surface,
+                BLACK,
                 (
                     self.x - px,
                     self.y - py
@@ -661,9 +649,9 @@ class Detail:
         # VOOLUALLIKAS
         # =================================================
 
-        elif self.tüüp == "vooluallikas":
+        elif self.kind == 'battery':
 
-            punktid = []
+            points = []
 
             for px, py in [
                 (-30, -20),
@@ -672,68 +660,68 @@ class Detail:
                 (-30, 20)
             ]:
 
-                punktid.append(
-                    pööra_punkt(
+                points.append(
+                    rotate_point(
                         self.x + px,
                         self.y + py,
                         self.x,
                         self.y,
-                        self.nurk
+                        self.angle
                     )
                 )
 
 
             pygame.draw.polygon(
-                pind,
-                VALGE,
-                punktid
+                surface,
+                WHITE,
+                points
             )
 
             pygame.draw.polygon(
-                pind,
-                MUST,
-                punktid,
+                surface,
+                BLACK,
+                points,
                 2
             )
 
 
             # MIINUS
 
-            p1 = pööra_punkt(
+            p1 = rotate_point(
                 self.x - 18,
                 self.y,
                 self.x,
                 self.y,
-                self.nurk
+                self.angle
             )
 
-            p2 = pööra_punkt(
+            p2 = rotate_point(
                 self.x - 7,
                 self.y,
                 self.x,
                 self.y,
-                self.nurk
+                self.angle
             )
 
 
             pygame.draw.line(
-                pind,
-                MUST,
+                surface,
+                BLACK,
                 p1,
                 p2,
                 3
             )
 
-            väärtuse_tekst = väike_font.render(
-                f"{self.pinge:g} V",
+            value_text = small_font.render(
+                f"{self.voltage:g} V",
                 True,
-                MUST
+                BLACK
             )
 
-            pind.blit(
-                väärtuse_tekst,
+            surface.blit(
+                value_text,
                 (
-                    self.x - väärtuse_tekst.get_width() / 2,
+                    self.x - value_text.get_width() / 2,
                     self.y + 22
                 )
             )
@@ -741,52 +729,52 @@ class Detail:
 
             # PLUSS
 
-            p1 = pööra_punkt(
+            p1 = rotate_point(
                 self.x + 7,
                 self.y,
                 self.x,
                 self.y,
-                self.nurk
+                self.angle
             )
 
-            p2 = pööra_punkt(
+            p2 = rotate_point(
                 self.x + 18,
                 self.y,
                 self.x,
                 self.y,
-                self.nurk
+                self.angle
             )
 
 
             pygame.draw.line(
-                pind,
-                MUST,
+                surface,
+                BLACK,
                 p1,
                 p2,
                 3
             )
 
 
-            p1 = pööra_punkt(
+            p1 = rotate_point(
                 self.x + 12,
                 self.y - 5,
                 self.x,
                 self.y,
-                self.nurk
+                self.angle
             )
 
-            p2 = pööra_punkt(
+            p2 = rotate_point(
                 self.x + 12,
                 self.y + 5,
                 self.x,
                 self.y,
-                self.nurk
+                self.angle
             )
 
 
             pygame.draw.line(
-                pind,
-                MUST,
+                surface,
+                BLACK,
                 p1,
                 p2,
                 3
@@ -797,13 +785,13 @@ class Detail:
         # VALIK
         # =================================================
 
-        if valitud:
+        if selected:
 
-            if self.tüüp == "lamp":
+            if self.kind == 'bulb':
 
                 pygame.draw.circle(
-                    pind,
-                    ROHELINE,
+                    surface,
+                    GREEN,
                     (
                         int(self.x),
                         int(self.y)
@@ -815,8 +803,8 @@ class Detail:
             else:
 
                 pygame.draw.rect(
-                    pind,
-                    ROHELINE,
+                    surface,
+                    GREEN,
                     self.rect().inflate(
                         8,
                         8
@@ -829,13 +817,13 @@ class Detail:
 # DETAILI OTSIMINE
 # =========================================================
 
-def leia_detail(pos):
+def find_component(pos):
 
-    for detail in reversed(detailid):
+    for component in reversed(components):
 
-        if detail.sisaldab(pos):
+        if component.contains(pos):
 
-            return detail
+            return component
 
     return None
 
@@ -844,539 +832,539 @@ def leia_detail(pos):
 # LÄHIMA KONTAKTI OTSIMINE
 # =========================================================
 
-def leia_lähim_kontakt(
-    punkt,
-    välja_arvatud=None
-):
+def closest_point_on_segment(point, start, end):
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length_squared = dx * dx + dy * dy
+    if length_squared == 0:
+        return start
+    fraction = max(0.0, min(1.0, ((point[0] - start[0]) * dx
+                                  + (point[1] - start[1]) * dy) / length_squared))
+    return start[0] + fraction * dx, start[1] + fraction * dy
 
-    parim = None
-    parim_kaugus = ÜHENDUSE_KAUGUS
 
-    for detail in detailid:
-
-        if detail is välja_arvatud:
+def find_nearest_terminal(point, excluded=None):
+    best = None
+    best_distance = SNAP_DISTANCE
+    for component in components:
+        if component is excluded:
             continue
-
-
-        for kontakt in detail.kontaktid():
-
-            d = kaugus(
-                punkt,
-                kontakt
-            )
-
-
-            if d < parim_kaugus:
-
-                parim_kaugus = d
-                parim = kontakt
-
-
-    return parim
+        targets = list(component.terminals())
+        if component.kind == 'wire':
+            targets.append(closest_point_on_segment(point, *component.terminals()))
+        for target in targets:
+            candidate_distance = distance(point, target)
+            if candidate_distance < best_distance:
+                best_distance = candidate_distance
+                best = target
+    return best
 
 
 # =========================================================
 # DETAILI ÜHENDAMINE
 # =========================================================
 
-def ühenda_detail(detail):
+def snap_component(component):
 
-    if detail not in detailid:
+    if component not in components:
         return
 
 
-    parim_nihutus = None
-    väikseim_kaugus = ÜHENDUSE_KAUGUS
+    best_offset = None
+    smallest_distance = SNAP_DISTANCE
 
 
-    for kontakt in detail.kontaktid():
+    for terminal in component.terminals():
 
-        siht = leia_lähim_kontakt(
-            kontakt,
-            detail
+        target = find_nearest_terminal(
+            terminal,
+            component
         )
 
 
-        if siht is None:
+        if target is None:
             continue
 
 
-        d = kaugus(
-            kontakt,
-            siht
+        d = distance(
+            terminal,
+            target
         )
 
 
-        if d < väikseim_kaugus:
+        if d < smallest_distance:
 
-            väikseim_kaugus = d
+            smallest_distance = d
 
-            parim_nihutus = (
-                siht[0] - kontakt[0],
-                siht[1] - kontakt[1]
+            best_offset = (
+                target[0] - terminal[0],
+                target[1] - terminal[1]
             )
 
 
-    if parim_nihutus is None:
+    if best_offset is None:
         return
 
 
-    dx, dy = parim_nihutus
+    dx, dy = best_offset
 
 
     # JUHE
 
-    if detail.tüüp == "juhe":
+    if component.kind == 'wire':
 
-        detail.algus_x += dx
-        detail.algus_y += dy
+        component.start_x += dx
+        component.start_y += dy
 
-        detail.lõpp_x += dx
-        detail.lõpp_y += dy
+        component.end_x += dx
+        component.end_y += dy
 
-        detail.uuenda_keskpunkt()
+        component.update_midpoint()
 
 
     # MUU DETAIL
 
     else:
 
-        detail.x += dx
-        detail.y += dy
+        component.x += dx
+        component.y += dy
 
 
 # =========================================================
 # JUHTME ÜHE OTSA ÜHENDAMINE
 # =========================================================
 
-def ühenda_juhtme_ots(
-    detail,
-    ots
+def snap_wire_endpoint(
+    component,
+    endpoint
 ):
 
-    if detail.tüüp != "juhe":
+    if component.kind != 'wire':
         return
 
 
-    if ots == "algus":
+    if endpoint == 'start':
 
-        punkt = (
-            detail.algus_x,
-            detail.algus_y
+        point = (
+            component.start_x,
+            component.start_y
         )
 
     else:
 
-        punkt = (
-            detail.lõpp_x,
-            detail.lõpp_y
+        point = (
+            component.end_x,
+            component.end_y
         )
 
 
-    siht = leia_lähim_kontakt(
-        punkt,
-        detail
+    target = find_nearest_terminal(
+        point,
+        component
     )
 
 
-    if siht is None:
+    if target is None:
         return
 
 
-    if kaugus(
-        punkt,
-        siht
-    ) > ÜHENDUSE_KAUGUS:
+    if distance(
+        point,
+        target
+    ) > SNAP_DISTANCE:
 
         return
 
 
-    if ots == "algus":
+    if endpoint == 'start':
 
-        detail.algus_x = siht[0]
-        detail.algus_y = siht[1]
+        component.start_x = target[0]
+        component.start_y = target[1]
 
     else:
 
-        detail.lõpp_x = siht[0]
-        detail.lõpp_y = siht[1]
+        component.end_x = target[0]
+        component.end_y = target[1]
 
 
-    detail.uuenda_keskpunkt()
+    component.update_midpoint()
 
 
 # =========================================================
 # AHELA ARVUTAMINE
 # =========================================================
 
-def lahenda_võrrandisüsteem(maatriks, tulemused):
+def solve_linear_system(matrix, results):
 
-    suurus = len(tulemused)
+    size = len(results)
 
-    for veerg in range(suurus):
+    for column in range(size):
 
         pivot = max(
-            range(veerg, suurus),
-            key=lambda rida: abs(maatriks[rida][veerg])
+            range(column, size),
+            key=lambda row: abs(matrix[row][column])
         )
 
-        if abs(maatriks[pivot][veerg]) < 1e-12:
+        if abs(matrix[pivot][column]) < 1e-12:
             return None
 
-        maatriks[veerg], maatriks[pivot] = maatriks[pivot], maatriks[veerg]
-        tulemused[veerg], tulemused[pivot] = tulemused[pivot], tulemused[veerg]
+        matrix[column], matrix[pivot] = matrix[pivot], matrix[column]
+        results[column], results[pivot] = results[pivot], results[column]
 
-        jagaja = maatriks[veerg][veerg]
+        divisor = matrix[column][column]
 
-        for kirje in range(veerg, suurus):
-            maatriks[veerg][kirje] /= jagaja
+        for entry in range(column, size):
+            matrix[column][entry] /= divisor
 
-        tulemused[veerg] /= jagaja
+        results[column] /= divisor
 
-        for rida in range(veerg + 1, suurus):
+        for row in range(column + 1, size):
 
-            kordaja = maatriks[rida][veerg]
+            multiplier = matrix[row][column]
 
-            if kordaja == 0:
+            if multiplier == 0:
                 continue
 
-            for kirje in range(veerg, suurus):
-                maatriks[rida][kirje] -= kordaja * maatriks[veerg][kirje]
+            for entry in range(column, size):
+                matrix[row][entry] -= multiplier * matrix[column][entry]
 
-            tulemused[rida] -= kordaja * tulemused[veerg]
+            results[row] -= multiplier * results[column]
 
-    vastus = [0.0] * suurus
+    solution = [0.0] * size
 
-    for rida in range(suurus - 1, -1, -1):
+    for row in range(size - 1, -1, -1):
 
-        vastus[rida] = tulemused[rida] - sum(
-            maatriks[rida][veerg] * vastus[veerg]
-            for veerg in range(rida + 1, suurus)
+        solution[row] = results[row] - sum(
+            matrix[row][column] * solution[column]
+            for column in range(row + 1, size)
         )
 
-    return vastus
+    return solution
 
 
-def lahenda_ahel(allikas):
+def build_circuit_nodes():
+    """Merge touching terminals and wire junctions into electrical nodes.
 
-    kontaktide_arv = len(detailid) * 2
-    vanem = list(range(kontaktide_arv))
+    An endpoint on a wire creates a junction. Two wire interiors crossing
+    without an endpoint remain independent, as in a circuit diagram.
+    """
+    terminal_points = [point for component in components
+                       for point in component.terminals()]
+    parent = list(range(len(terminal_points)))
 
-    def leia(indeks):
+    def find(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
 
-        while vanem[indeks] != indeks:
-            vanem[indeks] = vanem[vanem[indeks]]
-            indeks = vanem[indeks]
+    def union(first, second):
+        parent[find(second)] = find(first)
 
-        return indeks
+    for first, point in enumerate(terminal_points):
+        for second in range(first + 1, len(terminal_points)):
+            if distance(point, terminal_points[second]) <= CONNECTION_TOLERANCE:
+                union(first, second)
 
-    def ühenda(a, b):
-
-        juur_a = leia(a)
-        juur_b = leia(b)
-
-        if juur_a != juur_b:
-            vanem[juur_b] = juur_a
-
-    kontaktipunktid = [
-        kontakt
-        for detail in detailid
-        for kontakt in detail.kontaktid()
-    ]
-
-    for i, punkt_a in enumerate(kontaktipunktid):
-
-        for j in range(i + 1, kontaktide_arv):
-
-            punkt_b = kontaktipunktid[j]
-
-            if (
-                (punkt_a[0] - punkt_b[0]) ** 2
-                + (punkt_a[1] - punkt_b[1]) ** 2
-                <= 16
-            ):
-
-                ühenda(i, j)
-
-    for indeks, detail in enumerate(detailid):
-
-        if detail.tüüp == "juhe":
-            ühenda(indeks * 2, indeks * 2 + 1)
-
-    allika_indeks = detailid.index(allikas) * 2
-    maandus = leia(allika_indeks)
-    positiivne = leia(allika_indeks + 1)
-
-    takistid = []
-
-    for indeks, detail in enumerate(detailid):
-
-        if detail.tüüp not in ("takisti", "lamp"):
+    for index, component in enumerate(components):
+        if component.kind != 'wire':
             continue
+        start, end = component.terminals()
+        union(index * 2, index * 2 + 1)
+        for terminal_index, point in enumerate(terminal_points):
+            if distance(point, closest_point_on_segment(point, start, end)) <= CONNECTION_TOLERANCE:
+                union(index * 2, terminal_index)
 
-        if detail.tüüp == "lamp" and detail.läbi_põlenud:
+    return {component: (find(index * 2), find(index * 2 + 1))
+            for index, component in enumerate(components)}
+
+
+def solve_circuit():
+    """Solve every connected island, including all battery polarities.
+
+    Each battery is an ideal voltage source with SOURCE_INTERNAL_RESISTANCE
+    in series. Its Norton equivalent stamps a conductance and a signed
+    current injection, so series and parallel sources use the same solver.
+    """
+    nodes = build_circuit_nodes()
+    branches = []
+    sources = []
+    for component, (negative, positive) in nodes.items():
+        if component.kind == 'battery':
+            sources.append(component)
+            branches.append((negative, positive, SOURCE_INTERNAL_RESISTANCE,
+                             component.voltage, component))
+        elif component.kind in ('resistor', 'bulb') and not component.burned_out:
+            if component.resistance > 0:
+                branches.append((negative, positive, component.resistance,
+                                 0.0, component))
+
+    connections = {}
+    for first, second, _, _, component in branches:
+        connections.setdefault(first, []).append((second, component))
+        connections.setdefault(second, []).append((first, component))
+
+    # Each disconnected island needs its own arbitrary zero-voltage reference.
+    grounds = set()
+    visited = set()
+    for node in connections:
+        if node in visited:
             continue
+        grounds.add(node)
+        queue = [node]
+        visited.add(node)
+        while queue:
+            for neighbor, _ in connections[queue.pop()]:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
 
-        if detail.takistus <= 0:
+    unknowns = sorted(visited - grounds)
+    indices = {node: index for index, node in enumerate(unknowns)}
+    matrix = [[0.0] * len(unknowns) for _ in unknowns]
+    results = [0.0] * len(unknowns)
+    for first, second, resistance, voltage, _ in branches:
+        if first == second:
             continue
+        conductance = 1.0 / resistance
+        first_index = indices.get(first)
+        second_index = indices.get(second)
+        if first_index is not None:
+            matrix[first_index][first_index] += conductance
+            results[first_index] -= voltage * conductance
+        if second_index is not None:
+            matrix[second_index][second_index] += conductance
+            results[second_index] += voltage * conductance
+        if first_index is not None and second_index is not None:
+            matrix[first_index][second_index] -= conductance
+            matrix[second_index][first_index] -= conductance
 
-        takistid.append(
-            (
-                leia(indeks * 2),
-                leia(indeks * 2 + 1),
-                detail.takistus,
-                detail
-            )
-        )
-
-    ühendused = {}
-
-    for a, b, _, detail in takistid:
-
-        if a == b:
-            continue
-
-        ühendused.setdefault(a, []).append((b, detail))
-        ühendused.setdefault(b, []).append((a, detail))
-
-    nähtud = {positiivne}
-    järjekord = [positiivne]
-
-    while järjekord:
-
-        praegune = järjekord.pop()
-
-        for järgmine, _ in ühendused.get(praegune, ()):
-
-            if järgmine not in nähtud:
-                nähtud.add(järgmine)
-                järjekord.append(järgmine)
-
-    suletud = maandus in nähtud
-
-    if not suletud:
-
-        return {
-            "suletud": False,
-            "lühis": False,
-            "pinge": allikas.pinge,
-            "takistus": math.inf,
-            "vool": 0.0,
-            "lambi_võimsused": {},
-        }
-
-    if positiivne == maandus:
-
-        return {
-            "suletud": True,
-            "lühis": True,
-            "pinge": 0.0,
-            "takistus": 0.0,
-            "vool": allikas.pinge / ALLIKA_SISETAKISTUS,
-            "lambi_võimsused": {
-                detail: 0.0
-                for detail in detailid
-                if detail.tüüp == "lamp"
-            },
-        }
-
-    tundmatud = [sõlm for sõlm in nähtud if sõlm != maandus]
-    indeksid = {sõlm: indeks for indeks, sõlm in enumerate(tundmatud)}
-    maatriks = [
-        [0.0] * len(tundmatud)
-        for _ in tundmatud
-    ]
-    tulemused = [0.0] * len(tundmatud)
-
-    def lisa_takisti(sõlm_a, sõlm_b, takistus, fikseeritud_pinge=0.0):
-
-        juhtivus = 1.0 / takistus
-        indeks_a = indeksid.get(sõlm_a)
-        indeks_b = indeksid.get(sõlm_b)
-
-        if indeks_a is not None:
-            maatriks[indeks_a][indeks_a] += juhtivus
-
-            if indeks_b is not None:
-                maatriks[indeks_a][indeks_b] -= juhtivus
-            else:
-                tulemused[indeks_a] += juhtivus * fikseeritud_pinge
-
-        if indeks_b is not None:
-            maatriks[indeks_b][indeks_b] += juhtivus
-
-            if indeks_a is not None:
-                maatriks[indeks_b][indeks_a] -= juhtivus
-            else:
-                tulemused[indeks_b] += juhtivus * fikseeritud_pinge
-
-    for a, b, takistus, _ in takistid:
-
-        if a in nähtud and b in nähtud:
-            lisa_takisti(a, b, takistus)
-
-    lisa_takisti(
-        positiivne,
-        None,
-        ALLIKA_SISETAKISTUS,
-        allikas.pinge
-    )
-
-    pinged = lahenda_võrrandisüsteem(maatriks, tulemused)
-
-    if pinged is None:
-
-        return {
-            "suletud": False,
-            "lühis": False,
-            "pinge": allikas.pinge,
-            "takistus": math.inf,
-            "vool": 0.0,
-            "lambi_võimsused": {},
-        }
-
-    sõlme_pinged = {maandus: 0.0}
-    sõlme_pinged.update(
-        (sõlm, pinged[indeks])
-        for sõlm, indeks in indeksid.items()
-    )
-
-    lambi_võimsused = {}
-
-    for a, b, takistus, detail in takistid:
-
-        if detail.tüüp == "lamp":
-
-            pinge = sõlme_pinged.get(a, 0.0) - sõlme_pinged.get(b, 0.0)
-            lambi_võimsused[detail] = pinge * pinge / takistus
-
-    klemmipinge = max(0.0, sõlme_pinged.get(positiivne, 0.0))
-    vool = max(0.0, (allikas.pinge - klemmipinge) / ALLIKA_SISETAKISTUS)
-    ekvivalenttakistus = (
-        klemmipinge / vool
-        if vool > 1e-12
-        else math.inf
-    )
-
-    return {
-        "suletud": True,
-        "lühis": False,
-        "pinge": klemmipinge,
-        "takistus": ekvivalenttakistus,
-        "vool": vool,
-        "lambi_võimsused": lambi_võimsused,
+    voltages = solve_linear_system(matrix, results)
+    result = {
+        'closed': False,
+        'short_circuit': any(nodes[source][0] == nodes[source][1] for source in sources),
+        'voltage': 0.0,
+        'resistance': math.inf,
+        'current': 0.0,
+        'bulb_powers': {},
+        'component_voltages': {},
+        'component_currents': {},
+        'source_currents': {},
+        'circuit_measurements': ('Kogu ahel', math.nan, math.nan, math.nan, math.nan),
+        'junctions': junction_points(),
+        'solver_error': voltages is None,
     }
+    if voltages is None:
+        return result
+
+    node_voltages = {node: 0.0 for node in grounds}
+    node_voltages.update((node, voltages[index]) for node, index in indices.items())
+    for component, (first, second) in nodes.items():
+        voltage = node_voltages.get(second, 0.0) - node_voltages.get(first, 0.0)
+        result['component_voltages'][component] = voltage
+        result['component_currents'][component] = 0.0
+        if component.kind == 'bulb':
+            result['bulb_powers'][component] = 0.0
+
+    for first, second, resistance, voltage, component in branches:
+        terminal_voltage = result['component_voltages'][component]
+        if component.kind == 'battery':
+            # Positive means supplying power; negative means absorbing current.
+            current = (voltage - terminal_voltage) / resistance
+            result['source_currents'][component] = current
+        else:
+            current = -terminal_voltage / resistance
+        result['component_currents'][component] = current
+        if component.kind == 'bulb':
+            result['bulb_powers'][component] = current * current * resistance
+
+    # A closed loop can carry zero current when opposing sources cancel.
+    for source in sources:
+        negative, positive = nodes[source]
+        visited = {negative}
+        queue = [negative]
+        while queue:
+            for neighbor, component in connections.get(queue.pop(), ()):
+                if component is not source and neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        if positive in visited:
+            result['closed'] = True
+
+    if sources:
+        reference_source = max(sources, key=lambda source: abs(result['source_currents'][source]))
+        result['voltage'] = result['component_voltages'][reference_source]
+        result['current'] = result['source_currents'][reference_source]
+        # Multiple active sources do not define a single load resistance V/I.
+        if len(sources) == 1 and abs(result['current']) > 1e-12:
+            result['resistance'] = abs(result['voltage'] / result['current'])
+        elif len(sources) > 1:
+            result['resistance'] = math.nan
+    result['circuit_measurements'] = whole_circuit_measurements(result, nodes, node_voltages)
+    return result
 
 
-def simuleeri_ahel():
+def whole_circuit_measurements(result, nodes, node_voltages):
+    """Measure the load across the battery bank, excluding internal losses.
 
-    allikad = [
-        detail
-        for detail in detailid
-        if detail.tüüp == "vooluallikas"
-    ]
-    lambid = [
-        detail
-        for detail in detailid
-        if detail.tüüp == "lamp"
-    ]
+    Separate supplies or a bank with intermediate load taps have no single
+    supply voltage/current. Keep total load power, but mark those values N/A.
+    """
+    sources = list(result['source_currents'])
+    loads = [component for component in components
+             if component.kind in ('bulb', 'resistor')]
+    power = sum(abs(result['component_voltages'][component]
+                    * result['component_currents'][component]) for component in loads)
+    if not sources:
+        return 'Kogu ahel', 0.0, 0.0, math.inf, power
 
-    if not allikad:
+    source_connections = {}
+    for source in sources:
+        first, second = nodes[source]
+        source_connections.setdefault(first, set()).add(second)
+        source_connections.setdefault(second, set()).add(first)
+    visited = set()
+    queue = [next(iter(source_connections))]
+    while queue:
+        node = queue.pop()
+        if node not in visited:
+            visited.add(node)
+            queue.extend(source_connections[node] - visited)
+    if len(visited) != len(source_connections):
+        return 'Kogu ahel', math.nan, math.nan, math.nan, power
 
-        tulemus = {
-            "suletud": False,
-            "lühis": False,
-            "pinge": 0.0,
-            "takistus": math.inf,
-            "vool": 0.0,
-            "lambi_võimsused": {},
-        }
+    if len(visited) == 1:
+        current = sum(abs(result['source_currents'][source]) for source in sources)
+        return 'Kogu ahel', 0.0, current, 0.0, power
 
-    else:
+    load_nodes = {node for component in loads for node in nodes[component]}
+    terminals = visited & load_nodes
+    if len(terminals) < 2:
+        # An open load may touch only one bank terminal, or none at all.
+        terminals |= {node for node, neighbors in source_connections.items()
+                      if len(neighbors) == 1}
+    if len(terminals) != 2:
+        return 'Kogu ahel', math.nan, math.nan, math.nan, power
 
-        while True:
+    first, second = sorted(terminals)
+    voltage = abs(node_voltages[second] - node_voltages[first])
+    # Net current at the bank boundary sums parallel sources, while counting
+    # a series string only once. Charging currents retain their sign.
+    current = abs(sum(result['source_currents'][source]
+                      * ((nodes[source][1] == first) - (nodes[source][0] == first))
+                      for source in sources))
+    if current < 1e-12:
+        current = 0.0
+    resistance = voltage / current if current else math.inf
+    return 'Kogu ahel', voltage, current, resistance, power
 
-            tulemus = lahenda_ahel(allikad[0])
 
-            plahvatanud = [
-                lamp
-                for lamp in lambid
-                if (
-                    not lamp.läbi_põlenud
-                    and tulemus["lambi_võimsused"].get(lamp, 0.0)
-                    > lamp.nominaalvõimsus * LAMBIPIRNI_PLOKIMISPIIR
-                )
-            ]
+def junction_points():
+    """Return branch junctions for the canvas, using the solver's tolerance."""
+    points = []
+    for component in components:
+        for point in component.terminals():
+            incident_count = 0
+            for other in components:
+                start, end = other.terminals()
+                if other.kind == 'wire':
+                    if distance(point, closest_point_on_segment(point, start, end)) <= CONNECTION_TOLERANCE:
+                        incident_count += (1 if min(distance(point, start), distance(point, end))
+                                           <= CONNECTION_TOLERANCE else 2)
+                else:
+                    incident_count += sum(distance(point, terminal) <= CONNECTION_TOLERANCE
+                                          for terminal in (start, end))
+            if incident_count >= 3 and not any(distance(point, old) <= CONNECTION_TOLERANCE for old in points):
+                points.append(point)
+    return points
 
-            if not plahvatanud:
-                break
 
-            for lamp in plahvatanud:
-                lamp.läbi_põlenud = True
+def simulate_circuit():
+    bulbs = [component for component in components if component.kind == 'bulb']
+    while True:
+        result = solve_circuit()
+        overloaded_bulbs = [bulb for bulb in bulbs if (
+            not bulb.burned_out
+            and result['bulb_powers'].get(bulb, 0.0) > bulb.rated_power * BULB_BURNOUT_FACTOR
+        )]
+        if not overloaded_bulbs:
+            break
+        for bulb in overloaded_bulbs:
+            bulb.burned_out = True
 
-    lambi_võimsus = max(
-        tulemus["lambi_võimsused"].values(),
-        default=0.0
-    )
+    result['bulb_power'] = max(result['bulb_powers'].values(), default=0.0)
+    result['bulbs_burned_out'] = any(bulb.burned_out for bulb in bulbs)
+    result['bulbs_lit'] = {bulb: not bulb.burned_out
+                         and result['bulb_powers'].get(bulb, 0.0) >= BULB_MIN_POWER
+                         for bulb in bulbs}
+    result['bulb_lit'] = any(result['bulbs_lit'].values())
+    return result
 
-    tulemus["lambi_võimsus"] = lambi_võimsus
-    tulemus["lambid_läbi"] = any(lamp.läbi_põlenud for lamp in lambid)
-    tulemus["lambid_põlevad"] = {
-        lamp: (
-            not lamp.läbi_põlenud
-            and tulemus["lambi_võimsused"].get(lamp, 0.0)
-            >= LAMBIPIRNI_MIN_VOIMSUS
-        )
-        for lamp in lambid
-    }
-    tulemus["lamp_põleb"] = any(tulemus["lambid_põlevad"].values())
 
-    return tulemus
+def measurement_values(result):
+    """Measure the selected component, or the whole circuit by default."""
+    measured = selected_component
+    if measured is None or measured.kind == 'wire':
+        return result['circuit_measurements']
+    voltage = abs(result['component_voltages'].get(measured, 0.0))
+    current = result['component_currents'].get(measured, 0.0)
+    if measured.kind == 'battery':
+        return 'Allikas: sisetakistus', voltage, current, SOURCE_INTERNAL_RESISTANCE, voltage * current
+    resistance = math.inf if measured.burned_out else measured.resistance
+    name = 'Lamp' if measured.kind == 'bulb' else 'Takisti'
+    return name, voltage, abs(current), resistance, voltage * abs(current)
+
+
+def format_measurement(value, unit):
+    if math.isnan(value):
+        return f'— {unit}'
+    if math.isinf(value):
+        return f'∞ {unit}'
+    return f'{value:.3g} {unit}'
 
 
 # =========================================================
 # AJALUGU
 # =========================================================
 
-ajalugu = []
+history = []
 
 
-def salvesta():
+def save_history():
 
-    ajalugu.append(
+    history.append(
         copy.deepcopy(
-            detailid
+            components
         )
     )
 
 
-    if len(ajalugu) > 50:
+    if len(history) > 50:
 
-        ajalugu.pop(0)
+        history.pop(0)
 
 
-def tagasi():
+def undo():
 
-    global detailid
-    global valitud_detail
+    global components
+    global selected_component
 
-    if not ajalugu:
+    if not history:
         return
 
 
-    detailid = ajalugu.pop()
+    components = history.pop()
 
-    valitud_detail = None
+    selected_component = None
 
 
 # =========================================================
 # NUPUD
 # =========================================================
 
-nupud = [
+buttons = [
 
     (
-        "takisti",
+        'resistor',
         pygame.Rect(
             14,
             14,
@@ -1387,7 +1375,7 @@ nupud = [
     ),
 
     (
-        "lamp",
+        'bulb',
         pygame.Rect(
             130,
             14,
@@ -1398,7 +1386,7 @@ nupud = [
     ),
 
     (
-        "vooluallikas",
+        'battery',
         pygame.Rect(
             234,
             14,
@@ -1409,7 +1397,7 @@ nupud = [
     ),
 
     (
-        "juhe",
+        'wire',
         pygame.Rect(
             388,
             14,
@@ -1421,21 +1409,21 @@ nupud = [
 ]
 
 
-kustuta_nupp = pygame.Rect(
+delete_button = pygame.Rect(
     488,
     14,
     98,
     44
 )
 
-tagasi_nupp = pygame.Rect(
+undo_button = pygame.Rect(
     594,
     14,
     94,
     44
 )
 
-omaduse_väli = pygame.Rect(
+property_field = pygame.Rect(
     CANVAS_WIDTH + 22,
     468,
     SIDEBAR_WIDTH - 44,
@@ -1447,1333 +1435,1349 @@ omaduse_väli = pygame.Rect(
 # MUUTUJAD
 # =========================================================
 
-detailid = []
+components = []
 
-valitud_tüüp = None
+selected_kind = None
 
-valitud_detail = None
+selected_component = None
 
 # Detail, mis on hetkel hiirega kaasas.
 
-käes_olev = None
+held_component = None
 
 # Juba laual oleva detaili liigutamine.
 
-lohistatav = None
+dragged_component = None
 
-lohistamise_tüüp = None
+drag_mode = None
 
-nihke_x = 0
-nihke_y = 0
+offset_x = 0
+offset_y = 0
 
-muudetav_väli = None
-välja_tekst = ""
-sisendi_viga = False
-asenda_väli = False
-simulatsioon_vajab_uuendust = True
-simulatsiooni_tulemus = None
+edited_field = None
+field_text = ""
+input_error = False
+replace_field = False
+simulation_dirty = True
+simulation_result = None
 
 
 # =========================================================
 # PEAMINE TSÜKKEL
 # =========================================================
 
-töötab = True
+running = True
 
 
-while töötab:
+if __name__ == '__main__':
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Elektriskeemi koostaja")
+    
+    clock = pygame.time.Clock()
+    font = pygame.font.SysFont("segoeui", 22)
+    small_font = pygame.font.SysFont("segoeui", 16)
+    title_font = pygame.font.SysFont("segoeui", 25, bold=True)
+    number_font = pygame.font.SysFont("segoeui", 29, bold=True)
 
-    # =====================================================
-    # SÜNDMUSED
-    # =====================================================
+    while running:
 
-    for event in pygame.event.get():
+        # =====================================================
+        # SÜNDMUSED
+        # =====================================================
 
-        if event.type in (
-            pygame.KEYDOWN,
-            pygame.MOUSEBUTTONDOWN,
-            pygame.MOUSEBUTTONUP,
-            pygame.MOUSEMOTION
-        ):
+        for event in pygame.event.get():
 
-            simulatsioon_vajab_uuendust = True
-
-        # =================================================
-        # SULGEMINE
-        # =================================================
-
-        if event.type == pygame.QUIT:
-
-            töötab = False
-
-
-        # =================================================
-        # KLAVIATUUR
-        # =================================================
-
-        elif event.type == pygame.KEYDOWN:
-
-            if muudetav_väli is not None:
-
-                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-
-                    try:
-
-                        uus_väärtus = float(
-                            välja_tekst.replace(",", ".")
-                        )
-
-                    except ValueError:
-
-                        uus_väärtus = 0
-
-
-                    if (
-                        math.isfinite(uus_väärtus)
-                        and uus_väärtus > 0
-                        and valitud_detail is not None
-                    ):
-
-                        salvesta()
-
-                        if muudetav_väli == "takistus":
-
-                            valitud_detail.takistus = uus_väärtus
-
-                        else:
-
-                            valitud_detail.pinge = uus_väärtus
-
-
-                        muudetav_väli = None
-                        sisendi_viga = False
-
-                    else:
-
-                        sisendi_viga = True
-                        asenda_väli = True
-
-
-                elif event.key == pygame.K_BACKSPACE:
-
-                    if asenda_väli:
-
-                        välja_tekst = ""
-
-                    else:
-
-                        välja_tekst = välja_tekst[:-1]
-
-                    asenda_väli = False
-                    sisendi_viga = False
-
-
-                elif event.key == pygame.K_ESCAPE:
-
-                    muudetav_väli = None
-                    sisendi_viga = False
-
-
-                elif event.unicode in "0123456789.," and len(välja_tekst) < 14:
-
-                    if asenda_väli:
-
-                        välja_tekst = event.unicode
-
-                    else:
-
-                        välja_tekst += event.unicode
-
-                    asenda_väli = False
-                    sisendi_viga = False
-
-
-            elif (
-                event.key == pygame.K_z
-                and
-                event.mod & pygame.KMOD_CTRL
+            if event.type in (
+                pygame.KEYDOWN,
+                pygame.MOUSEBUTTONDOWN,
+                pygame.MOUSEBUTTONUP,
+                pygame.MOUSEMOTION
             ):
 
-                tagasi()
+                simulation_dirty = True
 
+            # =================================================
+            # SULGEMINE
+            # =================================================
 
-        # =================================================
-        # HIIRE NUPP ALLA
-        # =================================================
+            if event.type == pygame.QUIT:
 
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-
-            mx, my = pygame.mouse.get_pos()
+                running = False
 
 
             # =================================================
-            # VASAK HIIRE NUPP
+            # KLAVIATUUR
             # =================================================
 
-            if event.button == 1:
+            elif event.type == pygame.KEYDOWN:
 
-                nuppudele_vajutus = False
-                muudetav_väli = None
+                if edited_field is not None:
+
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+
+                        try:
+
+                            new_value = float(
+                                field_text.replace(",", ".")
+                            )
+
+                        except ValueError:
+
+                            new_value = 0
 
 
-                if mx >= CANVAS_WIDTH:
+                        if (
+                            math.isfinite(new_value)
+                            and new_value > 0
+                            and selected_component is not None
+                        ):
 
-                    nuppudele_vajutus = True
+                            save_history()
 
-                    if (
-                        omaduse_väli.collidepoint(mx, my)
-                        and valitud_detail is not None
-                        and valitud_detail.tüüp in ("takisti", "lamp", "vooluallikas")
-                    ):
+                            if edited_field == 'resistance':
 
-                        if valitud_detail.tüüp in ("takisti", "lamp"):
+                                selected_component.resistance = new_value
 
-                            muudetav_väli = "takistus"
-                            välja_tekst = f"{valitud_detail.takistus:g}"
+                            else:
+
+                                selected_component.voltage = new_value
+
+
+                            edited_field = None
+                            input_error = False
 
                         else:
 
-                            muudetav_väli = "pinge"
-                            välja_tekst = f"{valitud_detail.pinge:g}"
+                            input_error = True
+                            replace_field = True
 
-                        asenda_väli = True
-                        sisendi_viga = False
+
+                    elif event.key == pygame.K_BACKSPACE:
+
+                        if replace_field:
+
+                            field_text = ""
+
+                        else:
+
+                            field_text = field_text[:-1]
+
+                        replace_field = False
+                        input_error = False
+
+
+                    elif event.key == pygame.K_ESCAPE:
+
+                        edited_field = None
+                        input_error = False
+
+
+                    elif event.unicode in "0123456789.," and len(field_text) < 14:
+
+                        if replace_field:
+
+                            field_text = event.unicode
+
+                        else:
+
+                            field_text += event.unicode
+
+                        replace_field = False
+                        input_error = False
+
+
+                elif (
+                    event.key == pygame.K_z
+                    and
+                    event.mod & pygame.KMOD_CTRL
+                ):
+
+                    undo()
+
+
+            # =================================================
+            # HIIRE NUPP ALLA
+            # =================================================
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+
+                mx, my = pygame.mouse.get_pos()
 
 
                 # =================================================
-                # DETAILI NUPUD
+                # VASAK HIIRE NUPP
                 # =================================================
 
-                for tüüp, rect, nimi in nupud:
+                if event.button == 1:
 
-                    if rect.collidepoint(
+                    button_clicked = False
+                    edited_field = None
+
+
+                    if mx >= CANVAS_WIDTH:
+
+                        button_clicked = True
+
+                        if (
+                            property_field.collidepoint(mx, my)
+                            and selected_component is not None
+                            and selected_component.kind in ('resistor', 'bulb', 'battery')
+                        ):
+
+                            if selected_component.kind in ('resistor', 'bulb'):
+
+                                edited_field = 'resistance'
+                                field_text = f"{selected_component.resistance:g}"
+
+                            else:
+
+                                edited_field = 'voltage'
+                                field_text = f"{selected_component.voltage:g}"
+
+                            replace_field = True
+                            input_error = False
+
+
+                    # =================================================
+                    # DETAILI NUPUD
+                    # =================================================
+
+                    for kind, rect, name in buttons:
+
+                        if rect.collidepoint(
+                            mx,
+                            my
+                        ):
+
+                            button_clicked = True
+
+
+                            # Sama nupp = tühista valik.
+
+                            if selected_kind == kind:
+
+                                selected_kind = None
+                                held_component = None
+
+                            else:
+
+                                selected_kind = kind
+
+                                held_component = Component(
+                                    kind,
+                                    mx,
+                                    my
+                                )
+
+
+                            selected_component = None
+
+                            break
+
+
+                    # =================================================
+                    # KUSTUTA
+                    # =================================================
+
+                    if delete_button.collidepoint(
                         mx,
                         my
                     ):
 
-                        nuppudele_vajutus = True
+                        button_clicked = True
 
 
-                        # Sama nupp = tühista valik.
+                        if selected_component is not None:
 
-                        if valitud_tüüp == tüüp:
+                            save_history()
 
-                            valitud_tüüp = None
-                            käes_olev = None
+
+                            if selected_component in components:
+
+                                components.remove(
+                                    selected_component
+                                )
+
+
+                            selected_component = None
+
+
+                    if undo_button.collidepoint(mx, my):
+
+                        button_clicked = True
+                        undo()
+
+
+                    # =================================================
+                    # TÖÖALA
+                    # =================================================
+
+                    if not button_clicked:
+
+                        # =============================================
+                        # DETAIL ON KÄES
+                        # =============================================
+
+                        if held_component is not None:
+
+                            if my > TOOLBAR_HEIGHT and mx < CANVAS_WIDTH:
+
+                                save_history()
+
+
+                                new_component = copy.deepcopy(
+                                    held_component
+                                )
+
+
+                                components.append(
+                                    new_component
+                                )
+
+
+                                snap_component(
+                                    new_component
+                                )
+
+
+                                selected_component = new_component
+
+
+                                # -------------------------------------
+                                # Uus sama tüüpi detail jääb kätte.
+                                # -------------------------------------
+
+                                held_component = Component(
+                                    selected_kind,
+                                    mx,
+                                    my
+                                )
+
+
+                        # =============================================
+                        # MIDAGI EI OLE KÄES
+                        # =============================================
 
                         else:
 
-                            valitud_tüüp = tüüp
-
-                            käes_olev = Detail(
-                                tüüp,
-                                mx,
-                                my
-                            )
-
-
-                        valitud_detail = None
-
-                        break
-
-
-                # =================================================
-                # KUSTUTA
-                # =================================================
-
-                if kustuta_nupp.collidepoint(
-                    mx,
-                    my
-                ):
-
-                    nuppudele_vajutus = True
-
-
-                    if valitud_detail is not None:
-
-                        salvesta()
-
-
-                        if valitud_detail in detailid:
-
-                            detailid.remove(
-                                valitud_detail
-                            )
-
-
-                        valitud_detail = None
-
-
-                if tagasi_nupp.collidepoint(mx, my):
-
-                    nuppudele_vajutus = True
-                    tagasi()
-
-
-                # =================================================
-                # TÖÖALA
-                # =================================================
-
-                if not nuppudele_vajutus:
-
-                    # =============================================
-                    # DETAIL ON KÄES
-                    # =============================================
-
-                    if käes_olev is not None:
-
-                        if my > RIBA_KÕRGUS and mx < CANVAS_WIDTH:
-
-                            salvesta()
-
-
-                            uus = copy.deepcopy(
-                                käes_olev
-                            )
-
-
-                            detailid.append(
-                                uus
-                            )
-
-
-                            ühenda_detail(
-                                uus
-                            )
-
-
-                            valitud_detail = uus
-
-
-                            # -------------------------------------
-                            # Uus sama tüüpi detail jääb kätte.
-                            # -------------------------------------
-
-                            käes_olev = Detail(
-                                valitud_tüüp,
-                                mx,
-                                my
-                            )
-
-
-                    # =============================================
-                    # MIDAGI EI OLE KÄES
-                    # =============================================
-
-                    else:
-
-                        detail = leia_detail(
-                            (
-                                mx,
-                                my
-                            )
-                        )
-
-
-                        valitud_detail = detail
-
-
-                        if detail is not None:
-
-                            lohistatav = detail
-
-
-                            # =====================================
-                            # JUHE
-                            # =====================================
-
-                            if detail.tüüp == "juhe":
-
-                                kaugus_algus = kaugus(
-                                    (
-                                        mx,
-                                        my
-                                    ),
-                                    (
-                                        detail.algus_x,
-                                        detail.algus_y
-                                    )
+                            component = find_component(
+                                (
+                                    mx,
+                                    my
                                 )
+                            )
 
 
-                                kaugus_lõpp = kaugus(
-                                    (
-                                        mx,
-                                        my
-                                    ),
-                                    (
-                                        detail.lõpp_x,
-                                        detail.lõpp_y
-                                    )
-                                )
+                            selected_component = component
 
 
-                                if (
-                                    kaugus_algus
-                                    <=
-                                    KONTAKTI_KAUGUS
-                                ):
+                            if component is not None:
 
-                                    lohistamise_tüüp = (
-                                        "algus"
-                                    )
+                                dragged_component = component
 
 
-                                elif (
-                                    kaugus_lõpp
-                                    <=
-                                    KONTAKTI_KAUGUS
-                                ):
+                                # =====================================
+                                # JUHE
+                                # =====================================
 
-                                    lohistamise_tüüp = (
-                                        "lõpp"
+                                if component.kind == 'wire':
+
+                                    start_distance = distance(
+                                        (
+                                            mx,
+                                            my
+                                        ),
+                                        (
+                                            component.start_x,
+                                            component.start_y
+                                        )
                                     )
 
+
+                                    end_distance = distance(
+                                        (
+                                            mx,
+                                            my
+                                        ),
+                                        (
+                                            component.end_x,
+                                            component.end_y
+                                        )
+                                    )
+
+
+                                    if (
+                                        start_distance
+                                        <=
+                                        TERMINAL_HIT_RADIUS
+                                    ):
+
+                                        drag_mode = (
+                                            'start'
+                                        )
+
+
+                                    elif (
+                                        end_distance
+                                        <=
+                                        TERMINAL_HIT_RADIUS
+                                    ):
+
+                                        drag_mode = (
+                                            'end'
+                                        )
+
+
+                                    else:
+
+                                        drag_mode = (
+                                            'whole'
+                                        )
+
+
+                                        offset_x = (
+                                            component.x
+                                            -
+                                            mx
+                                        )
+
+
+                                        offset_y = (
+                                            component.y
+                                            -
+                                            my
+                                        )
+
+
+                                # =====================================
+                                # MUU DETAIL
+                                # =====================================
 
                                 else:
 
-                                    lohistamise_tüüp = (
-                                        "kogu"
+                                    drag_mode = (
+                                        'whole'
                                     )
 
 
-                                    nihke_x = (
-                                        detail.x
+                                    offset_x = (
+                                        component.x
                                         -
                                         mx
                                     )
 
 
-                                    nihke_y = (
-                                        detail.y
+                                    offset_y = (
+                                        component.y
                                         -
                                         my
                                     )
 
 
-                            # =====================================
-                            # MUU DETAIL
-                            # =====================================
+                # =================================================
+                # PAREM HIIRE NUPP
+                # =================================================
 
-                            else:
+                elif event.button == 3:
 
-                                lohistamise_tüüp = (
-                                    "kogu"
-                                )
+                    # =============================================
+                    # JUHE / DETAIL ON KÄES
+                    # =============================================
 
+                    if held_component is not None:
 
-                                nihke_x = (
-                                    detail.x
-                                    -
-                                    mx
-                                )
+                        # -----------------------------------------
+                        # JUHTME PÖÖRAMINE
+                        # -----------------------------------------
 
+                        if held_component.kind == 'wire':
 
-                                nihke_y = (
-                                    detail.y
-                                    -
-                                    my
-                                )
+                            cx = held_component.x
+                            cy = held_component.y
 
 
-            # =================================================
-            # PAREM HIIRE NUPP
-            # =================================================
-
-            elif event.button == 3:
-
-                # =============================================
-                # JUHE / DETAIL ON KÄES
-                # =============================================
-
-                if käes_olev is not None:
-
-                    # -----------------------------------------
-                    # JUHTME PÖÖRAMINE
-                    # -----------------------------------------
-
-                    if käes_olev.tüüp == "juhe":
-
-                        cx = käes_olev.x
-                        cy = käes_olev.y
+                            new_start = rotate_point(
+                                held_component.start_x,
+                                held_component.start_y,
+                                cx,
+                                cy,
+                                90
+                            )
 
 
-                        uus_algus = pööra_punkt(
-                            käes_olev.algus_x,
-                            käes_olev.algus_y,
-                            cx,
-                            cy,
-                            90
+                            new_end = rotate_point(
+                                held_component.end_x,
+                                held_component.end_y,
+                                cx,
+                                cy,
+                                90
+                            )
+
+
+                            held_component.start_x = (
+                                new_start[0]
+                            )
+
+                            held_component.start_y = (
+                                new_start[1]
+                            )
+
+
+                            held_component.end_x = (
+                                new_end[0]
+                            )
+
+                            held_component.end_y = (
+                                new_end[1]
+                            )
+
+
+                            held_component.update_midpoint()
+
+
+                        # -----------------------------------------
+                        # MUU DETAIL
+                        # -----------------------------------------
+
+                        else:
+
+                            held_component.angle += 90
+
+                            if held_component.angle >= 360:
+
+                                held_component.angle = 0
+
+
+                    # =============================================
+                    # LAUAL OLEV DETAIL
+                    # =============================================
+
+                    elif selected_component is not None:
+
+                        save_history()
+
+
+                        component = selected_component
+
+
+                        # -----------------------------------------
+                        # JUHE
+                        # -----------------------------------------
+
+                        if component.kind == 'wire':
+
+                            cx = component.x
+                            cy = component.y
+
+
+                            new_start = rotate_point(
+                                component.start_x,
+                                component.start_y,
+                                cx,
+                                cy,
+                                90
+                            )
+
+
+                            new_end = rotate_point(
+                                component.end_x,
+                                component.end_y,
+                                cx,
+                                cy,
+                                90
+                            )
+
+
+                            component.start_x = (
+                                new_start[0]
+                            )
+
+                            component.start_y = (
+                                new_start[1]
+                            )
+
+
+                            component.end_x = (
+                                new_end[0]
+                            )
+
+                            component.end_y = (
+                                new_end[1]
+                            )
+
+
+                            component.update_midpoint()
+
+
+                        # -----------------------------------------
+                        # MUU DETAIL
+                        # -----------------------------------------
+
+                        else:
+
+                            component.angle += 90
+
+                            if component.angle >= 360:
+
+                                component.angle = 0
+
+
+                        snap_component(
+                            component
                         )
 
 
-                        uus_lõpp = pööra_punkt(
-                            käes_olev.lõpp_x,
-                            käes_olev.lõpp_y,
-                            cx,
-                            cy,
-                            90
-                        )
+            # =====================================================
+            # HIIRE LIIKUMINE
+            # =====================================================
+
+            elif event.type == pygame.MOUSEMOTION:
+
+                mx, my = pygame.mouse.get_pos()
 
 
-                        käes_olev.algus_x = (
-                            uus_algus[0]
-                        )
+                # =================================================
+                # DETAIL ON KÄES
+                # =================================================
 
-                        käes_olev.algus_y = (
-                            uus_algus[1]
-                        )
+                if held_component is not None:
 
-
-                        käes_olev.lõpp_x = (
-                            uus_lõpp[0]
-                        )
-
-                        käes_olev.lõpp_y = (
-                            uus_lõpp[1]
-                        )
-
-
-                        käes_olev.uuenda_keskpunkt()
-
-
-                    # -----------------------------------------
-                    # MUU DETAIL
-                    # -----------------------------------------
-
-                    else:
-
-                        käes_olev.nurk += 90
-
-                        if käes_olev.nurk >= 360:
-
-                            käes_olev.nurk = 0
-
-
-                # =============================================
-                # LAUAL OLEV DETAIL
-                # =============================================
-
-                elif valitud_detail is not None:
-
-                    salvesta()
-
-
-                    detail = valitud_detail
-
-
-                    # -----------------------------------------
+                    # ---------------------------------------------
                     # JUHE
-                    # -----------------------------------------
-
-                    if detail.tüüp == "juhe":
-
-                        cx = detail.x
-                        cy = detail.y
-
-
-                        uus_algus = pööra_punkt(
-                            detail.algus_x,
-                            detail.algus_y,
-                            cx,
-                            cy,
-                            90
-                        )
-
-
-                        uus_lõpp = pööra_punkt(
-                            detail.lõpp_x,
-                            detail.lõpp_y,
-                            cx,
-                            cy,
-                            90
-                        )
-
-
-                        detail.algus_x = (
-                            uus_algus[0]
-                        )
-
-                        detail.algus_y = (
-                            uus_algus[1]
-                        )
-
-
-                        detail.lõpp_x = (
-                            uus_lõpp[0]
-                        )
-
-                        detail.lõpp_y = (
-                            uus_lõpp[1]
-                        )
-
-
-                        detail.uuenda_keskpunkt()
-
-
-                    # -----------------------------------------
-                    # MUU DETAIL
-                    # -----------------------------------------
-
-                    else:
-
-                        detail.nurk += 90
-
-                        if detail.nurk >= 360:
-
-                            detail.nurk = 0
-
-
-                    ühenda_detail(
-                        detail
-                    )
-
-
-        # =====================================================
-        # HIIRE LIIKUMINE
-        # =====================================================
-
-        elif event.type == pygame.MOUSEMOTION:
-
-            mx, my = pygame.mouse.get_pos()
-
-
-            # =================================================
-            # DETAIL ON KÄES
-            # =================================================
-
-            if käes_olev is not None:
-
-                # ---------------------------------------------
-                # JUHE
-                # ---------------------------------------------
-
-                if käes_olev.tüüp == "juhe":
-
-                    # Väga oluline:
-                    # liigume mõlemat juhet korraga.
-                    #
-                    # See parandab vea, kus ainult x/y
-                    # muutus, aga juhtme otsad jäid vanale
-                    # kohale.
-
-                    dx = (
-                        mx
-                        -
-                        käes_olev.x
-                    )
-
-                    dy = (
-                        my
-                        -
-                        käes_olev.y
-                    )
-
-
-                    käes_olev.algus_x += dx
-                    käes_olev.algus_y += dy
-
-                    käes_olev.lõpp_x += dx
-                    käes_olev.lõpp_y += dy
-
-
-                    käes_olev.uuenda_keskpunkt()
-
-
-                # ---------------------------------------------
-                # MUU DETAIL
-                # ---------------------------------------------
-
-                else:
-
-                    käes_olev.x = mx
-                    käes_olev.y = my
-
-
-                # =================================================
-                # MAGNEETILINE ÜHENDAMINE
-                # =================================================
-
-                lähim_kontakt = None
-                lähim_siht = None
-
-                väikseim_kaugus = (
-                    ÜHENDUSE_KAUGUS
-                )
-
-
-                for kontakt in käes_olev.kontaktid():
-
-                    siht = leia_lähim_kontakt(
-                        kontakt,
-                        käes_olev
-                    )
-
-
-                    if siht is None:
-                        continue
-
-
-                    d = kaugus(
-                        kontakt,
-                        siht
-                    )
-
-
-                    if d < väikseim_kaugus:
-
-                        väikseim_kaugus = d
-
-                        lähim_kontakt = kontakt
-
-                        lähim_siht = siht
-
-
-                if (
-                    lähim_kontakt is not None
-                    and
-                    lähim_siht is not None
-                ):
-
-                    dx = (
-                        lähim_siht[0]
-                        -
-                        lähim_kontakt[0]
-                    )
-
-                    dy = (
-                        lähim_siht[1]
-                        -
-                        lähim_kontakt[1]
-                    )
-
-
-                    # -----------------------------------------
-                    # Nihutame kogu detaili.
-                    # -----------------------------------------
-
-                    if käes_olev.tüüp == "juhe":
-
-                        käes_olev.algus_x += dx
-                        käes_olev.algus_y += dy
-
-                        käes_olev.lõpp_x += dx
-                        käes_olev.lõpp_y += dy
-
-                        käes_olev.uuenda_keskpunkt()
-
-
-                    else:
-
-                        käes_olev.x += dx
-                        käes_olev.y += dy
-
-
-            # =================================================
-            # LAUAL OLEV DETAIL
-            # =================================================
-
-            if lohistatav is not None:
-
-                detail = lohistatav
-
-
-                # =============================================
-                # JUHE
-                # =============================================
-
-                if detail.tüüp == "juhe":
-
-                    # -----------------------------------------
-                    # KOGU JUHE
-                    # -----------------------------------------
-
-                    if lohistamise_tüüp == "kogu":
-
-                        uus_kesk_x = (
-                            mx
-                            +
-                            nihke_x
-                        )
-
-                        uus_kesk_y = (
-                            my
-                            +
-                            nihke_y
-                        )
-
+                    # ---------------------------------------------
+
+                    if held_component.kind == 'wire':
+
+                        # Väga oluline:
+                        # liigume mõlemat juhet korraga.
+                        #
+                        # See parandab vea, kus ainult x/y
+                        # muutus, aga juhtme otsad jäid vanale
+                        # kohale.
 
                         dx = (
-                            uus_kesk_x
+                            mx
                             -
-                            detail.x
+                            held_component.x
                         )
 
                         dy = (
-                            uus_kesk_y
+                            my
                             -
-                            detail.y
+                            held_component.y
                         )
 
 
-                        detail.algus_x += dx
-                        detail.algus_y += dy
+                        held_component.start_x += dx
+                        held_component.start_y += dy
 
-                        detail.lõpp_x += dx
-                        detail.lõpp_y += dy
-
-
-                        detail.uuenda_keskpunkt()
+                        held_component.end_x += dx
+                        held_component.end_y += dy
 
 
-                    # -----------------------------------------
-                    # ALGUS
-                    # -----------------------------------------
-
-                    elif lohistamise_tüüp == "algus":
-
-                        detail.algus_x = mx
-                        detail.algus_y = my
-
-                        detail.uuenda_keskpunkt()
+                        held_component.update_midpoint()
 
 
-                    # -----------------------------------------
-                    # LÕPP
-                    # -----------------------------------------
+                    # ---------------------------------------------
+                    # MUU DETAIL
+                    # ---------------------------------------------
 
-                    elif lohistamise_tüüp == "lõpp":
+                    else:
 
-                        detail.lõpp_x = mx
-                        detail.lõpp_y = my
-
-                        detail.uuenda_keskpunkt()
+                        held_component.x = mx
+                        held_component.y = my
 
 
-                # =============================================
-                # MUU DETAIL
-                # =============================================
+                    # =================================================
+                    # MAGNEETILINE ÜHENDAMINE
+                    # =================================================
 
-                else:
+                    nearest_terminal = None
+                    nearest_target = None
 
-                    detail.x = (
-                        mx
-                        +
-                        nihke_x
-                    )
-
-                    detail.y = (
-                        my
-                        +
-                        nihke_y
+                    smallest_distance = (
+                        SNAP_DISTANCE
                     )
 
 
-        # =====================================================
-        # HIIRE NUPP ÜLES
-        # =====================================================
+                    for terminal in held_component.terminals():
 
-        elif event.type == pygame.MOUSEBUTTONUP:
-
-            if event.button == 1:
-
-                # =============================================
-                # LAUALT LIIGUTATUD DETAIL
-                # =============================================
-
-                if lohistatav is not None:
-
-                    detail = lohistatav
+                        target = find_nearest_terminal(
+                            terminal,
+                            held_component
+                        )
 
 
-                    if detail.tüüp == "juhe":
-
-                        if (
-                            lohistamise_tüüp
-                            ==
-                            "algus"
-                        ):
-
-                            ühenda_juhtme_ots(
-                                detail,
-                                "algus"
-                            )
+                        if target is None:
+                            continue
 
 
-                        elif (
-                            lohistamise_tüüp
-                            ==
-                            "lõpp"
-                        ):
+                        d = distance(
+                            terminal,
+                            target
+                        )
 
-                            ühenda_juhtme_ots(
-                                detail,
-                                "lõpp"
-                            )
+
+                        if d < smallest_distance:
+
+                            smallest_distance = d
+
+                            nearest_terminal = terminal
+
+                            nearest_target = target
+
+
+                    if (
+                        nearest_terminal is not None
+                        and
+                        nearest_target is not None
+                    ):
+
+                        dx = (
+                            nearest_target[0]
+                            -
+                            nearest_terminal[0]
+                        )
+
+                        dy = (
+                            nearest_target[1]
+                            -
+                            nearest_terminal[1]
+                        )
+
+
+                        # -----------------------------------------
+                        # Nihutame kogu detaili.
+                        # -----------------------------------------
+
+                        if held_component.kind == 'wire':
+
+                            held_component.start_x += dx
+                            held_component.start_y += dy
+
+                            held_component.end_x += dx
+                            held_component.end_y += dy
+
+                            held_component.update_midpoint()
 
 
                         else:
 
-                            ühenda_detail(
-                                detail
+                            held_component.x += dx
+                            held_component.y += dy
+
+
+                # =================================================
+                # LAUAL OLEV DETAIL
+                # =================================================
+
+                if dragged_component is not None:
+
+                    component = dragged_component
+
+
+                    # =============================================
+                    # JUHE
+                    # =============================================
+
+                    if component.kind == 'wire':
+
+                        # -----------------------------------------
+                        # KOGU JUHE
+                        # -----------------------------------------
+
+                        if drag_mode == 'whole':
+
+                            new_center_x = (
+                                mx
+                                +
+                                offset_x
+                            )
+
+                            new_center_y = (
+                                my
+                                +
+                                offset_y
                             )
 
 
+                            dx = (
+                                new_center_x
+                                -
+                                component.x
+                            )
+
+                            dy = (
+                                new_center_y
+                                -
+                                component.y
+                            )
+
+
+                            component.start_x += dx
+                            component.start_y += dy
+
+                            component.end_x += dx
+                            component.end_y += dy
+
+
+                            component.update_midpoint()
+
+
+                        # -----------------------------------------
+                        # ALGUS
+                        # -----------------------------------------
+
+                        elif drag_mode == 'start':
+
+                            component.start_x = mx
+                            component.start_y = my
+
+                            component.update_midpoint()
+
+
+                        # -----------------------------------------
+                        # LÕPP
+                        # -----------------------------------------
+
+                        elif drag_mode == 'end':
+
+                            component.end_x = mx
+                            component.end_y = my
+
+                            component.update_midpoint()
+
+
+                    # =============================================
+                    # MUU DETAIL
+                    # =============================================
+
                     else:
 
-                        ühenda_detail(
-                            detail
+                        component.x = (
+                            mx
+                            +
+                            offset_x
+                        )
+
+                        component.y = (
+                            my
+                            +
+                            offset_y
                         )
 
 
-                lohistatav = None
-                lohistamise_tüüp = None
+            # =====================================================
+            # HIIRE NUPP ÜLES
+            # =====================================================
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+
+                if event.button == 1:
+
+                    # =============================================
+                    # LAUALT LIIGUTATUD DETAIL
+                    # =============================================
+
+                    if dragged_component is not None:
+
+                        component = dragged_component
 
 
-    # =========================================================
-    # AHELA SIMULATSIOON
-    # =========================================================
+                        if component.kind == 'wire':
 
-    if simulatsioon_vajab_uuendust:
+                            if (
+                                drag_mode
+                                ==
+                                'start'
+                            ):
 
-        simulatsiooni_tulemus = simuleeri_ahel()
-        simulatsioon_vajab_uuendust = False
-
-
-    lamp_põleb = simulatsiooni_tulemus["lamp_põleb"]
-    lamp_läbi_põlenud = simulatsiooni_tulemus["lambid_läbi"]
-
-
-    # =========================================================
-    # TAUST
-    # =========================================================
-
-    screen.fill(
-        HELE_HALL
-    )
+                                snap_wire_endpoint(
+                                    component,
+                                    'start'
+                                )
 
 
-    pygame.draw.rect(
-        screen,
-        VALGE,
-        (0, RIBA_KÕRGUS, CANVAS_WIDTH, HEIGHT - RIBA_KÕRGUS)
-    )
+                            elif (
+                                drag_mode
+                                ==
+                                'end'
+                            ):
+
+                                snap_wire_endpoint(
+                                    component,
+                                    'end'
+                                )
 
 
-    for grid_x in range(12, CANVAS_WIDTH, 24):
+                            else:
 
-        pygame.draw.line(
-            screen,
-            RUUDUSTIK,
-            (grid_x, RIBA_KÕRGUS),
-            (grid_x, HEIGHT),
-            1
+                                snap_component(
+                                    component
+                                )
+
+
+                        else:
+
+                            snap_component(
+                                component
+                            )
+
+
+                    dragged_component = None
+                    drag_mode = None
+
+
+        # =========================================================
+        # AHELA SIMULATSIOON
+        # =========================================================
+
+        if simulation_dirty:
+
+            simulation_result = simulate_circuit()
+            simulation_dirty = False
+
+
+        bulb_lit = simulation_result['bulb_lit']
+        bulb_burned_out = simulation_result['bulbs_burned_out']
+
+
+        # =========================================================
+        # TAUST
+        # =========================================================
+
+        screen.fill(
+            LIGHT_GRAY
         )
-
-
-    for grid_y in range(RIBA_KÕRGUS + 12, HEIGHT, 24):
-
-        pygame.draw.line(
-            screen,
-            RUUDUSTIK,
-            (0, grid_y),
-            (CANVAS_WIDTH, grid_y),
-            1
-        )
-
-
-    # =========================================================
-    # ÜLEMINE RIBA
-    # =========================================================
-
-    pygame.draw.rect(
-        screen,
-        HALL,
-        (
-            0,
-            0,
-            CANVAS_WIDTH,
-            RIBA_KÕRGUS
-        )
-    )
-
-
-    pygame.draw.line(
-        screen,
-        (216, 226, 230),
-        (0, RIBA_KÕRGUS - 1),
-        (CANVAS_WIDTH, RIBA_KÕRGUS - 1),
-        1
-    )
-
-
-    # =========================================================
-    # DETAILI NUPUD
-    # =========================================================
-
-    for tüüp, rect, nimi in nupud:
-
-        hiirel = rect.collidepoint(pygame.mouse.get_pos())
-
-        if valitud_tüüp == tüüp:
-
-            taustavärv = HELE_ROHELINE
-            äärevärv = ROHELINE
-
-        else:
-
-            taustavärv = VALGE if not hiirel else (232, 241, 244)
-            äärevärv = (194, 208, 214)
 
 
         pygame.draw.rect(
             screen,
-            taustavärv,
-            rect,
+            WHITE,
+            (0, TOOLBAR_HEIGHT, CANVAS_WIDTH, HEIGHT - TOOLBAR_HEIGHT)
+        )
+
+
+        for grid_x in range(12, CANVAS_WIDTH, 24):
+
+            pygame.draw.line(
+                screen,
+                GRID_COLOR,
+                (grid_x, TOOLBAR_HEIGHT),
+                (grid_x, HEIGHT),
+                1
+            )
+
+
+        for grid_y in range(TOOLBAR_HEIGHT + 12, HEIGHT, 24):
+
+            pygame.draw.line(
+                screen,
+                GRID_COLOR,
+                (0, grid_y),
+                (CANVAS_WIDTH, grid_y),
+                1
+            )
+
+
+        # =========================================================
+        # ÜLEMINE RIBA
+        # =========================================================
+
+        pygame.draw.rect(
+            screen,
+            GRAY,
+            (
+                0,
+                0,
+                CANVAS_WIDTH,
+                TOOLBAR_HEIGHT
+            )
+        )
+
+
+        pygame.draw.line(
+            screen,
+            (216, 226, 230),
+            (0, TOOLBAR_HEIGHT - 1),
+            (CANVAS_WIDTH, TOOLBAR_HEIGHT - 1),
+            1
+        )
+
+
+        # =========================================================
+        # DETAILI NUPUD
+        # =========================================================
+
+        for kind, rect, name in buttons:
+
+            hovered = rect.collidepoint(pygame.mouse.get_pos())
+
+            if selected_kind == kind:
+
+                background_color = LIGHT_GREEN
+                border_color = GREEN
+
+            else:
+
+                background_color = WHITE if not hovered else (232, 241, 244)
+                border_color = (194, 208, 214)
+
+
+            pygame.draw.rect(
+                screen,
+                background_color,
+                rect,
+                border_radius=8
+            )
+
+
+            pygame.draw.rect(
+                screen,
+                border_color,
+                rect,
+                1,
+                border_radius=8
+            )
+
+
+            text = font.render(
+                name,
+                True,
+                BLACK
+            )
+
+
+            screen.blit(
+                text,
+                (
+                    rect.centerx -
+                    text.get_width() / 2,
+
+                    rect.centery -
+                    text.get_height() / 2
+                )
+            )
+
+
+        # =========================================================
+        # KUSTUTA
+        # =========================================================
+
+        if selected_component is not None:
+
+            delete_color = LIGHT_RED
+
+        else:
+
+            delete_color = WHITE
+
+
+        pygame.draw.rect(
+            screen,
+            delete_color,
+            delete_button,
             border_radius=8
         )
 
 
         pygame.draw.rect(
             screen,
-            äärevärv,
-            rect,
+            RED if selected_component is not None else (194, 208, 214),
+            delete_button,
             1,
             border_radius=8
         )
 
 
-        tekst = font.render(
-            nimi,
+        text = font.render(
+            "Kustuta",
             True,
-            MUST
+            BLACK
         )
 
 
         screen.blit(
-            tekst,
+            text,
             (
-                rect.centerx -
-                tekst.get_width() / 2,
+                delete_button.centerx -
+                text.get_width() / 2,
 
-                rect.centery -
-                tekst.get_height() / 2
+                delete_button.centery -
+                text.get_height() / 2
             )
         )
 
 
-    # =========================================================
-    # KUSTUTA
-    # =========================================================
-
-    if valitud_detail is not None:
-
-        kustuta_värv = HELE_PUNANE
-
-    else:
-
-        kustuta_värv = VALGE
-
-
-    pygame.draw.rect(
-        screen,
-        kustuta_värv,
-        kustuta_nupp,
-        border_radius=8
-    )
-
-
-    pygame.draw.rect(
-        screen,
-        PUNANE if valitud_detail is not None else (194, 208, 214),
-        kustuta_nupp,
-        1,
-        border_radius=8
-    )
-
-
-    tekst = font.render(
-        "Kustuta",
-        True,
-        MUST
-    )
-
-
-    screen.blit(
-        tekst,
-        (
-            kustuta_nupp.centerx -
-            tekst.get_width() / 2,
-
-            kustuta_nupp.centery -
-            tekst.get_height() / 2
+        pygame.draw.rect(
+            screen,
+            WHITE,
+            undo_button,
+            border_radius=8
         )
-    )
 
-
-    pygame.draw.rect(
-        screen,
-        VALGE,
-        tagasi_nupp,
-        border_radius=8
-    )
-
-    pygame.draw.rect(
-        screen,
-        (194, 208, 214),
-        tagasi_nupp,
-        1,
-        border_radius=8
-    )
-
-    tekst = font.render("Undo", True, MUST)
-    screen.blit(
-        tekst,
-        (
-            tagasi_nupp.centerx - tekst.get_width() / 2,
-            tagasi_nupp.centery - tekst.get_height() / 2
+        pygame.draw.rect(
+            screen,
+            (194, 208, 214),
+            undo_button,
+            1,
+            border_radius=8
         )
-    )
 
-
-    pinge = simulatsiooni_tulemus["pinge"]
-    vool = simulatsiooni_tulemus["vool"]
-    takistus = simulatsiooni_tulemus["takistus"]
-    lambi_võimsus = simulatsiooni_tulemus["lambi_võimsus"]
-
-    pygame.draw.rect(
-        screen,
-        TUMEPANEEL,
-        (CANVAS_WIDTH, 0, SIDEBAR_WIDTH, HEIGHT)
-    )
-
-    pygame.draw.line(
-        screen,
-        (52, 72, 81),
-        (CANVAS_WIDTH, 0),
-        (CANVAS_WIDTH, HEIGHT),
-        1
-    )
-
-    paneeli_x = CANVAS_WIDTH + 24
-
-    tekst = väike_font.render("ELEKTRISKEEM", True, PANEELI_VAIKNE)
-    screen.blit(tekst, (paneeli_x, 20))
-
-    tekst = pealkirja_font.render("Mõõteriistad", True, PANEELI_TEKS)
-    screen.blit(tekst, (paneeli_x, 39))
-
-    oleku_riba = pygame.Rect(paneeli_x, 86, SIDEBAR_WIDTH - 48, 38)
-    if lamp_läbi_põlenud:
-
-        olek = "PIRN LÄBI PÕLENUD"
-        oleku_värv = (111, 58, 57)
-
-    elif lamp_põleb:
-
-        olek = "PIRN PÕLEB"
-        oleku_värv = (31, 111, 82)
-
-    elif simulatsiooni_tulemus["suletud"]:
-
-        olek = "VOOL LIIGA VÄIKE"
-        oleku_värv = (119, 91, 42)
-
-    else:
-
-        olek = "AHEL AVATUD"
-        oleku_värv = (111, 58, 57)
-
-
-    pygame.draw.rect(screen, oleku_värv, oleku_riba, border_radius=7)
-
-    oleku_tekst = font.render(olek, True, VALGE)
-    screen.blit(
-        oleku_tekst,
-        (
-            oleku_riba.centerx - oleku_tekst.get_width() / 2,
-            oleku_riba.centery - oleku_tekst.get_height() / 2
-        )
-    )
-
-    takistuse_tekst = (
-        f"{takistus:.3g} Ω"
-        if math.isfinite(takistus)
-        else "∞ Ω"
-    )
-
-    mõõdikud = [
-        ("LAMBI KLEMMIPINGE", f"{pinge:.3g} V"),
-        ("EKVIVALENTTAKISTUS", takistuse_tekst),
-        ("VOOL", f"{vool:.3g} A"),
-        ("LAMBI VÕIMSUS", f"{lambi_võimsus:.3g} W")
-    ]
-
-    for indeks, (silt, väärtus) in enumerate(mõõdikud):
-
-        y = 143 + indeks * 58
+        text = font.render("Undo", True, BLACK)
         screen.blit(
-            väike_font.render(silt, True, PANEELI_VAIKNE),
-            (paneeli_x, y)
+            text,
+            (
+                undo_button.centerx - text.get_width() / 2,
+                undo_button.centery - text.get_height() / 2
+            )
         )
+
+
+        measurement_name, voltage, current, resistance, bulb_power = measurement_values(simulation_result)
+
+        pygame.draw.rect(
+            screen,
+            DARK_PANEL,
+            (CANVAS_WIDTH, 0, SIDEBAR_WIDTH, HEIGHT)
+        )
+
+        pygame.draw.line(
+            screen,
+            (52, 72, 81),
+            (CANVAS_WIDTH, 0),
+            (CANVAS_WIDTH, HEIGHT),
+            1
+        )
+
+        panel_x = CANVAS_WIDTH + 24
+
+        text = small_font.render("ELEKTRISKEEM", True, PANEL_MUTED)
+        screen.blit(text, (panel_x, 20))
+
+        text = title_font.render(measurement_name, True, PANEL_TEXT)
+        screen.blit(text, (panel_x, 39))
+
+        status_bar = pygame.Rect(panel_x, 86, SIDEBAR_WIDTH - 48, 38)
+        if simulation_result['solver_error']:
+
+            status = 'ARVUTUSVIGA'
+            status_color = (111, 58, 57)
+
+        elif simulation_result['short_circuit']:
+
+            status = 'LÜHIS'
+            status_color = (111, 58, 57)
+
+        elif bulb_burned_out:
+
+            status = "PIRN LÄBI PÕLENUD"
+            status_color = (111, 58, 57)
+
+        elif bulb_lit:
+
+            status = "PIRN PÕLEB"
+            status_color = (31, 111, 82)
+
+        elif simulation_result['closed']:
+
+            status = "VOOL LIIGA VÄIKE"
+            status_color = (119, 91, 42)
+
+        else:
+
+            status = "AHEL AVATUD"
+            status_color = (111, 58, 57)
+
+
+        pygame.draw.rect(screen, status_color, status_bar, border_radius=7)
+
+        status_text = font.render(status, True, WHITE)
         screen.blit(
-            arvu_font.render(väärtus, True, PANEELI_TEKS),
-            (paneeli_x, y + 17)
+            status_text,
+            (
+                status_bar.centerx - status_text.get_width() / 2,
+                status_bar.centery - status_text.get_height() / 2
+            )
         )
 
-        if indeks < len(mõõdikud) - 1:
+        whole_circuit = selected_component is None or selected_component.kind == 'wire'
+        meters = [
+            ("KOGUPINGE" if whole_circuit else "KLEMMIPINGE", format_measurement(voltage, 'V')),
+            ("EKVIVALENTTAKISTUS" if whole_circuit else "TAKISTUS", format_measurement(resistance, 'Ω')),
+            ("KOGUVOOL" if whole_circuit else "VOOL", format_measurement(current, 'A')),
+            ("KOGUVÕIMSUS" if whole_circuit else "VÕIMSUS", format_measurement(bulb_power, 'W'))
+        ]
 
-            pygame.draw.line(
+        for index, (label, value) in enumerate(meters):
+
+            y = 143 + index * 58
+            screen.blit(
+                small_font.render(label, True, PANEL_MUTED),
+                (panel_x, y)
+            )
+            screen.blit(
+                number_font.render(value, True, PANEL_TEXT),
+                (panel_x, y + 17)
+            )
+
+            if index < len(meters) - 1:
+
+                pygame.draw.line(
+                    screen,
+                    (52, 72, 81),
+                    (panel_x, y + 51),
+                    (WIDTH - 24, y + 51),
+                    1
+                )
+
+
+        pygame.draw.line(
+            screen,
+            (52, 72, 81),
+            (panel_x, 386),
+            (WIDTH - 24, 386),
+            1
+        )
+
+        screen.blit(
+            title_font.render("Detaili väärtus", True, PANEL_TEXT),
+            (panel_x, 398)
+        )
+
+        if selected_component is not None and selected_component.kind == 'resistor':
+
+            field_label = "TAKISTUS"
+            field_value = f"{selected_component.resistance:g}"
+            unit = "Ω"
+
+        elif selected_component is not None and selected_component.kind == 'bulb':
+
+            field_label = "LAMBI TAKISTUS"
+            field_value = f"{selected_component.resistance:g}"
+            unit = "Ω"
+
+        elif selected_component is not None and selected_component.kind == 'battery':
+
+            field_label = "ALLIKA PINGE"
+            field_value = f"{selected_component.voltage:g}"
+            unit = "V"
+
+        else:
+
+            field_label = "VALI TAKISTI, LAMP VÕI ALLIKAS"
+            field_value = ""
+            unit = ""
+
+        screen.blit(
+            small_font.render(field_label, True, PANEL_MUTED),
+            (panel_x, 435)
+        )
+
+        field_border = RED if input_error else GREEN if edited_field else (74, 96, 104)
+        field_background = (35, 53, 62) if field_value else (31, 45, 53)
+        pygame.draw.rect(screen, field_background, property_field, border_radius=7)
+        pygame.draw.rect(screen, field_border, property_field, 2 if edited_field else 1, border_radius=7)
+
+        displayed_value = field_text if edited_field else field_value
+        value_text = font.render(displayed_value, True, PANEL_TEXT)
+        screen.blit(
+            value_text,
+            (property_field.x + 13, property_field.centery - value_text.get_height() / 2)
+        )
+
+        unit_text = font.render(unit, True, PANEL_MUTED)
+        screen.blit(
+            unit_text,
+            (property_field.right - unit_text.get_width() - 13,
+             property_field.centery - unit_text.get_height() / 2)
+        )
+
+        hint_text = "Vajuta Enter, et rakendada" if edited_field else "Klõpsa väärtusel muutmiseks"
+        screen.blit(
+            small_font.render(hint_text, True, PANEL_MUTED),
+            (panel_x, 520)
+        )
+
+        if input_error:
+
+            screen.blit(
+                small_font.render("Sisesta arv, mis on suurem kui 0", True, (255, 145, 135)),
+                (panel_x, 542)
+            )
+
+        pygame.draw.line(
+            screen,
+            (52, 72, 81),
+            (panel_x, HEIGHT - 82),
+            (WIDTH - 24, HEIGHT - 82),
+            1
+        )
+
+        screen.blit(
+            small_font.render("Ctrl+Z  Samm tagasi", True, PANEL_MUTED),
+            (panel_x, HEIGHT - 62)
+        )
+
+        screen.blit(
+            small_font.render("Parema klahviga pööra detaili", True, PANEL_MUTED),
+            (panel_x, HEIGHT - 38)
+        )
+
+
+        # =========================================================
+        # LAUAL OLEVAD DETAILID
+        # =========================================================
+
+        screen.set_clip(
+            pygame.Rect(
+                0,
+                TOOLBAR_HEIGHT,
+                CANVAS_WIDTH,
+                HEIGHT - TOOLBAR_HEIGHT
+            )
+        )
+
+        for component in components:
+
+            component.draw(
                 screen,
-                (52, 72, 81),
-                (paneeli_x, y + 51),
-                (WIDTH - 24, y + 51),
-                1
+                component == selected_component,
+                simulation_result['bulbs_lit'].get(component, False),
+                component.burned_out
             )
 
 
-    pygame.draw.line(
-        screen,
-        (52, 72, 81),
-        (paneeli_x, 386),
-        (WIDTH - 24, 386),
-        1
-    )
+        for point in simulation_result['junctions']:
+            pygame.draw.circle(screen, BLACK, (round(point[0]), round(point[1])), 6)
 
-    screen.blit(
-        pealkirja_font.render("Detaili väärtus", True, PANEELI_TEKS),
-        (paneeli_x, 398)
-    )
+        # =========================================================
+        # KÄES OLEV DETAIL
+        # =========================================================
 
-    if valitud_detail is not None and valitud_detail.tüüp == "takisti":
+        if held_component is not None:
 
-        välja_silt = "TAKISTUS"
-        välja_väärtus = f"{valitud_detail.takistus:g}"
-        ühik = "Ω"
-
-    elif valitud_detail is not None and valitud_detail.tüüp == "lamp":
-
-        välja_silt = "LAMBI TAKISTUS"
-        välja_väärtus = f"{valitud_detail.takistus:g}"
-        ühik = "Ω"
-
-    elif valitud_detail is not None and valitud_detail.tüüp == "vooluallikas":
-
-        välja_silt = "ALLIKA PINGE"
-        välja_väärtus = f"{valitud_detail.pinge:g}"
-        ühik = "V"
-
-    else:
-
-        välja_silt = "VALI TAKISTI, LAMP VÕI ALLIKAS"
-        välja_väärtus = ""
-        ühik = ""
-
-    screen.blit(
-        väike_font.render(välja_silt, True, PANEELI_VAIKNE),
-        (paneeli_x, 435)
-    )
-
-    välja_ääre = PUNANE if sisendi_viga else ROHELINE if muudetav_väli else (74, 96, 104)
-    välja_taust = (35, 53, 62) if välja_väärtus else (31, 45, 53)
-    pygame.draw.rect(screen, välja_taust, omaduse_väli, border_radius=7)
-    pygame.draw.rect(screen, välja_ääre, omaduse_väli, 2 if muudetav_väli else 1, border_radius=7)
-
-    kuvatav_väärtus = välja_tekst if muudetav_väli else välja_väärtus
-    väärtuse_tekst = font.render(kuvatav_väärtus, True, PANEELI_TEKS)
-    screen.blit(
-        väärtuse_tekst,
-        (omaduse_väli.x + 13, omaduse_väli.centery - väärtuse_tekst.get_height() / 2)
-    )
-
-    ühiku_tekst = font.render(ühik, True, PANEELI_VAIKNE)
-    screen.blit(
-        ühiku_tekst,
-        (omaduse_väli.right - ühiku_tekst.get_width() - 13,
-         omaduse_väli.centery - ühiku_tekst.get_height() / 2)
-    )
-
-    kui_tekst = "Vajuta Enter, et rakendada" if muudetav_väli else "Klõpsa väärtusel muutmiseks"
-    screen.blit(
-        väike_font.render(kui_tekst, True, PANEELI_VAIKNE),
-        (paneeli_x, 520)
-    )
-
-    if sisendi_viga:
-
-        screen.blit(
-            väike_font.render("Sisesta arv, mis on suurem kui 0", True, (255, 145, 135)),
-            (paneeli_x, 542)
-        )
-
-    pygame.draw.line(
-        screen,
-        (52, 72, 81),
-        (paneeli_x, HEIGHT - 82),
-        (WIDTH - 24, HEIGHT - 82),
-        1
-    )
-
-    screen.blit(
-        väike_font.render("Ctrl+Z  Samm tagasi", True, PANEELI_VAIKNE),
-        (paneeli_x, HEIGHT - 62)
-    )
-
-    screen.blit(
-        väike_font.render("Parema klahviga pööra detaili", True, PANEELI_VAIKNE),
-        (paneeli_x, HEIGHT - 38)
-    )
+            held_component.draw(
+                screen,
+                True,
+                False,
+                False
+            )
 
 
-    # =========================================================
-    # LAUAL OLEVAD DETAILID
-    # =========================================================
-
-    screen.set_clip(
-        pygame.Rect(
-            0,
-            RIBA_KÕRGUS,
-            CANVAS_WIDTH,
-            HEIGHT - RIBA_KÕRGUS
-        )
-    )
-
-    for detail in detailid:
-
-        detail.joonista(
-            screen,
-            detail == valitud_detail,
-            simulatsiooni_tulemus["lambid_põlevad"].get(detail, False),
-            detail.läbi_põlenud
-        )
+        screen.set_clip(None)
 
 
-    # =========================================================
-    # KÄES OLEV DETAIL
-    # =========================================================
+        # =========================================================
+        # EKRAANI UUENDAMINE
+        # =========================================================
 
-    if käes_olev is not None:
+        pygame.display.flip()
 
-        käes_olev.joonista(
-            screen,
-            True,
-            False,
-            False
-        )
+        clock.tick(60)
 
 
-    screen.set_clip(None)
-
-
-    # =========================================================
-    # EKRAANI UUENDAMINE
-    # =========================================================
-
-    pygame.display.flip()
-
-    clock.tick(60)
-
-
-pygame.quit()
+    pygame.quit()
 
 
