@@ -442,12 +442,13 @@ class App:
 
     # Tsükkel
     def run(self):
-        while True:
+        running_ulpimine = True
+        while running_ulpimine:
             dt = min(self.clock.tick(FPS) / 1000.0, 1 / 30)
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+                    running_ulpimine = False
+                    
                 elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                     self.on_click(e.pos)
                 elif e.type == pygame.KEYDOWN:
@@ -458,5 +459,4 @@ class App:
             pygame.display.flip()
 
 
-if __name__ == "__main__":
-    App().run()
+App().run()

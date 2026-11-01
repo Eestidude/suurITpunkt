@@ -1469,7 +1469,7 @@ simulation_result = None
 running = True
 
 
-if __name__ == '__main__':
+if True:
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Elektriskeemi koostaja")
@@ -2778,6 +2778,6 @@ if __name__ == '__main__':
         clock.tick(60)
 
 
-    pygame.quit()
+    #pygame.quit()
 
 
