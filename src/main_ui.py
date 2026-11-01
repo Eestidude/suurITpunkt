@@ -33,7 +33,7 @@ el = 600 * scale
 running = True
 
 screen = pg.display.set_mode((el,ek), pg.RESIZABLE)
-pg.display.set_caption("Füüsika simulatsioonid")
+pg.display.set_caption('Füüsika "simulatsioonid"')
 
 
 ''' KONSTANTID'''
@@ -73,6 +73,7 @@ def start_menu():
         
         if os.path.isfile(dir_path+"\\gfx\\"+sim[0:-3]+".jpg"):
             uus_img = dir_path+"\\gfx\\"+sim[0:-3]+".jpg"
+            print("sig")
             
         else:
             uus_img = dir_path+"\\gfx\\ulpimine.jpg"
@@ -80,7 +81,7 @@ def start_menu():
             uus_color = [240,240,240]
         else:
             uus_color=[220,220,220]
-        uus_ikoon = Ikoon(uus_rect, color = uus_color, tekst = uus_tekst, original_pos=(ikoon_x,ikoon_y))
+        uus_ikoon = Ikoon(uus_rect, color = uus_color, img = uus_img, tekst = uus_tekst, original_pos=(ikoon_x,ikoon_y))
         ikoonid.append(uus_ikoon)
         ikoon_y+= ikoon_h
     
@@ -162,6 +163,7 @@ def start_menu():
             joonista_nupp(nupp)
         for objekt in tausta_objektid:
             joonista_tausta_objekt(objekt)
+        
         pg.display.flip()
     
 class Text:
