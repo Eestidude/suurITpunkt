@@ -1,5 +1,4 @@
 import pygame as pg
-import pygame
 import math
 from screeninfo import get_monitors
 import sys
@@ -7,12 +6,16 @@ import pathlib
 import os 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
+
 dir_gfx = dir_path + '\\gfx'
 dir_sim = dir_path + '\\simulaatorid'
 
+
 sims = os.listdir(dir_sim)
 pg.init()
-
+käsi = pg.cursors.Cursor(pg.SYSTEM_CURSOR_HAND)
+tavaline = pg.cursors.Cursor(pg.SYSTEM_CURSOR_ARROW)
+pg.mouse.set_cursor(tavaline)
 
 
 for ekraan in get_monitors():
@@ -25,12 +28,12 @@ scale_width = el/2560
 
 scale = min (scale_height, scale_width)
 
-ek = 1440 * scale - 60
-el = 2560 * scale
+ek = 800 * scale
+el = 600 * scale
 running = True
 
 screen = pg.display.set_mode((el,ek), pg.RESIZABLE)
-
+pg.display.set_caption("Füüsika simulatsioonid")
 
 
 ''' KONSTANTID'''
@@ -54,13 +57,13 @@ screen.fill(tausta_värv)
 def start_menu():
     dragables = [side_bar_scroll_bar_slider]
     hoverables = [side_bar_scroll_bar_slider, side_bar_scroll_bar_arrow_up, side_bar_scroll_bar_arrow_down]
-    nuppud= [ava_fail_nupp, side_bar_scroll_bar_slider, side_bar_scroll_bar_arrow_up, side_bar_scroll_bar_arrow_down]
-    tausta_objektid = [top_bar, side_bar, side_bar_scroll_bar]
+    nuppud= [side_bar_scroll_bar_slider, side_bar_scroll_bar_arrow_up, side_bar_scroll_bar_arrow_down]
+    tausta_objektid = [top_bar]
     ikoonid = []
     ikoon_x = 20
     ikoon_y = ek/6
-    ikoon_w = el/6 - 20
-    ikoon_h = int(ek/14)
+    ikoon_w = el - 20
+    ikoon_h = int(ek/6)
     uus_color = [250,250,250]
     for sim in sims:
         
@@ -70,24 +73,27 @@ def start_menu():
         
         if os.path.isfile(dir_path+"\\gfx\\"+sim[0:-3]+".jpg"):
             uus_img = dir_path+"\\gfx\\"+sim[0:-3]+".jpg"
-            print("sigma")
+            
         else:
             uus_img = dir_path+"\\gfx\\ulpimine.jpg"
         if uus_color == [220,220,220]:
             uus_color = [240,240,240]
         else:
             uus_color=[220,220,220]
-        uus_ikoon = Ikoon(uus_rect, color = uus_color, tekst = uus_tekst)
+        uus_ikoon = Ikoon(uus_rect, color = uus_color, tekst = uus_tekst, original_pos=(ikoon_x,ikoon_y))
         ikoonid.append(uus_ikoon)
         ikoon_y+= ikoon_h
     
+    side_bar_scroll_bar_slider.rectangle_object.height = min( ek*5/6-40+1, ( (ek*5/6) / (len(ikoonid)*ikoon_h)*(ek*5/6-40+1) ))
     dragging_bar = False
     bar_offset = 0
+    ikoon_offset = 0
     dragging = False
     hoverable = False
     running = True
     
     while running:
+        ikoon_offset = 0
         screen.fill(tausta_värv)
         for event in pg.event.get():
                 if event.type == pg.QUIT:
@@ -102,6 +108,9 @@ def start_menu():
                     dragging_bar.color = [210,210,210]
                     dragging_bar = False
                     bar_offset = 0
+                    ikoon_offset = 0
+                    
+                    
                 elif dragging_bar: # VAJAB MUUTUSI
                     if event.type == pg.MOUSEMOTION:
                         if bar_offset == 0:
@@ -110,24 +119,31 @@ def start_menu():
                         
                         if new_pos < top_bar_height+20:
                             dragging_bar.rectangle_object.y = top_bar_height +20
+                            ikoon_offset = 0
                             
                         elif new_pos > ek-20-dragging_bar.rectangle_object.height:
                             dragging_bar.rectangle_object.y = ek - dragging_bar.rectangle_object.height-20
-            
+                            ikoon_offset = (len(ikoonid)-5)*ikoon_h
                         else:
                             dragging_bar.rectangle_object.y = new_pos
-                
+                            ikoon_offset = (len(ikoonid)-5)*ikoon_h  *(new_pos- (top_bar_height +20) )/ ((ek - dragging_bar.rectangle_object.height-20) - (top_bar_height +20))
+                            
+                        for ikoon in ikoonid:
+                            ikoon.rectangle_object.y = ikoon.oy - ikoon_offset
+                            
+                                                    
                 elif event.type == pg.MOUSEBUTTONUP and not (dragging or dragging_bar):
-                    if ava_fail_nupp.rectangle_object.collidepoint(event.pos):
-                        namespace = {}
-                        exec(open(dir_sim +'\\ulpimine.py', encoding='UTF-8').read(), namespace)
-                        pg.display.set_mode((el,ek), pg.RESIZABLE)
-                    else:
+#                     if ava_fail_nupp.rectangle_object.collidepoint(event.pos):
+#                         namespace = {}
+#                         exec(open(dir_sim +'\\ulpimine.py', encoding='UTF-8').read(), namespace)
+#                         pg.display.set_mode((el,ek), pg.RESIZABLE)
+                    if True:
                         for ikoon in ikoonid:
                             if ikoon.rectangle_object.collidepoint(event.pos):
                                 namespace = {}
                                 exec(open(dir_sim+'\\'+ ikoon.tekst.tekst, encoding = 'UTF-8').read(), namespace)
                                 pg.display.set_mode((el,ek), pg.RESIZABLE)
+                                pg.display.set_caption("Füüsika simulatsioonid")
                     
                                 
         if not dragging and not dragging_bar:
@@ -139,13 +155,15 @@ def start_menu():
                     if obj.rectangle_object.collidepoint(pg.mouse.get_pos()):
                         hoverable = obj
                         hoverable.color = [190,190,190]
-        for objekt in tausta_objektid:
-            joonista_tausta_objekt(objekt)
-        for nupp in nuppud:
-            joonista_nupp(nupp)
+        
         for icon in ikoonid:
             joonista_sim_ikoon(icon)
+        for nupp in nuppud:
+            joonista_nupp(nupp)
+        for objekt in tausta_objektid:
+            joonista_tausta_objekt(objekt)
         pg.display.flip()
+    
 class Text:
     def __init__(self, tekst = "", font_name = "Arial", font_size = 36, color = "black", offset = (0,0)):
         self.tekst = tekst
@@ -163,13 +181,17 @@ class Nupp:
             self.tekst = tekst
         else:
             self.tekst = Text(tekst)
+        self.x = rectangle_object.x
+        self.y = rectangle_object.y
+        self.w = rectangle_object.width
+        self.h = rectangle_object.height
 class Tausta_objekt:
     def __init__(self, rectangle_object, color):
         self.rectangle_object = rectangle_object
         self.color = color
 
 class Ikoon:
-    def __init__(self, rectangle_object, color = [240,240,240], img = dir_path+"\\gfx\\ulpimine.jpg", tekst = 'No Name'):
+    def __init__(self, rectangle_object, color = [240,240,240], img = dir_path+"\\gfx\\ulpimine.jpg", tekst = 'No Name', original_pos = (0,0)):
         image = pg.image.load(img) 
         self.rectangle_object = rectangle_object
         self.color = color
@@ -183,6 +205,8 @@ class Ikoon:
         self.y = rectangle_object.y
         self.w = rectangle_object.width
         self.h = rectangle_object.height
+        self.ox = original_pos[0]
+        self.oy = original_pos[1]
 
 def joonista_sim_ikoon(ikoon):
     pg.draw.rect(screen, rect = ikoon.rectangle_object, color = ikoon.color)
@@ -196,7 +220,7 @@ def joonista_sim_ikoon(ikoon):
     img_x = int(ikoon.pilt.get_width()/2)- int(img_w/2)
     img_y = int(ikoon.pilt.get_height()/2)- int(img_h/2)
     
-    screen.blit(ikoon.pilt, dest = (ikoon.x+5, ikoon.y+5), area = pg.Rect(img_x,img_y, img_w, img_h ))
+    screen.blit(ikoon.pilt, dest = (ikoon.rectangle_object.x+5, ikoon.rectangle_object.y+5), area = pg.Rect(img_x,img_y, img_w, img_h ))
     
 def joonista_nupp(nupp):
     tfont = pg.font.SysFont(nupp.tekst.font_name, nupp.tekst.font_size)
@@ -210,11 +234,12 @@ def joonista_tausta_objekt(tausta_objekt):
     
 '''NUPPUD'''
 
-ava_fail_nupp = Nupp(pg.Rect(el/2-100,ek/2-50,200,100),[255,255,255],"Ava fail")
-side_bar_scroll_bar_slider = Nupp(pg.Rect(0, top_bar_height + 20, 20, 100), [210, 210, 210])
+# ava_fail_nupp = Nupp(pg.Rect(el/2-100,ek/2-50,200,100),[255,255,255],"Ava fail")
+
 side_bar_scroll_bar_arrow_up = Nupp(pg.Rect(0, top_bar_height, 20, 20), [210, 210, 210], Text("^", font_size = 20, offset = (0,5)))
 side_bar_scroll_bar_arrow_down = Nupp(pg.Rect(0, ek-20, 20, 20), [210, 210, 210], Text("v", font_size = 16, offset = (0, -3)))
-katse_ikoon = Ikoon(pg.Rect(100, 100, 50, 100))
+side_bar_scroll_bar_slider = Nupp(pg.Rect(0, top_bar_height + 20, 20, ek*5/6-40+1), [210, 210, 210])
+# katse_ikoon = Ikoon(pg.Rect(100, 100, 50, 100))
 '''RIBAD'''
 
 top_bar = Tausta_objekt(pg.Rect(0,0,top_bar_width, top_bar_height), [200,200,200])
