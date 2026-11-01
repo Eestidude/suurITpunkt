@@ -2,16 +2,21 @@ import pygame as pg
 import math
 from screeninfo import get_monitors
 import sys
-import pathlib
-import os 
-dir_path = os.path.dirname(os.path.realpath(__file__))
+import sys
+from pathlib import Path
+import os
 
+if getattr(sys, "frozen", False):
+    # Running as a compiled EXE
+    dir_path = Path(sys.executable).resolve().parent
+else:
+    # Running as a normal Python script
+    dir_path = Path(__file__).resolve().parent
 
-dir_gfx = dir_path + '\\gfx'
-dir_sim = dir_path + '\\simulaatorid'
+dir_gfx = dir_path / "gfx"
+dir_sim = dir_path / "simulaatorid"
 
-
-sims = os.listdir(dir_sim)
+sims = [p.name for p in dir_sim.glob("*.py")]
 pg.init()
 käsi = pg.cursors.Cursor(pg.SYSTEM_CURSOR_HAND)
 tavaline = pg.cursors.Cursor(pg.SYSTEM_CURSOR_ARROW)
@@ -71,12 +76,12 @@ def start_menu():
         uus_tekst = Text(tekst = uus_tekst, offset=(50,-20), font_size = 24)
         uus_rect = pg.Rect(ikoon_x, ikoon_y, ikoon_w, ikoon_h)
         
-        if os.path.isfile(dir_path+"\\gfx\\"+sim[0:-3]+".jpg"):
-            uus_img = dir_path+"\\gfx\\"+sim[0:-3]+".jpg"
-            print("sig")
-            
+        image_path = dir_gfx / f"{Path(sim).stem}.jpg"
+
+        if image_path.is_file():
+            uus_img = str(image_path)
         else:
-            uus_img = dir_path+"\\gfx\\ulpimine.jpg"
+            uus_img = str(dir_gfx / "ulpimine.jpg")
         if uus_color == [220,220,220]:
             uus_color = [240,240,240]
         else:
@@ -141,8 +146,14 @@ def start_menu():
                     if True:
                         for ikoon in ikoonid:
                             if ikoon.rectangle_object.collidepoint(event.pos):
-                                namespace = {}
-                                exec(open(dir_sim+'\\'+ ikoon.tekst.tekst, encoding = 'UTF-8').read(), namespace)
+                                script_path = dir_sim / ikoon.tekst.tekst
+
+                                namespace = {"__name__": "__main__","__file__": str(script_path),}
+
+                                with open(script_path, "r", encoding="UTF-8") as f:
+                                    code = f.read()
+
+                                exec(compile(code, str(script_path), "exec"), namespace, namespace)
                                 pg.display.set_mode((el,ek), pg.RESIZABLE)
                                 pg.display.set_caption("Füüsika simulatsioonid")
                     
@@ -193,7 +204,7 @@ class Tausta_objekt:
         self.color = color
 
 class Ikoon:
-    def __init__(self, rectangle_object, color = [240,240,240], img = dir_path+"\\gfx\\ulpimine.jpg", tekst = 'No Name', original_pos = (0,0)):
+    def __init__(self, rectangle_object, color = [240,240,240], img = None, tekst = 'No Name', original_pos = (0,0)):
         image = pg.image.load(img) 
         self.rectangle_object = rectangle_object
         self.color = color
