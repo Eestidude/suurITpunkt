@@ -1,363 +1,357 @@
+"""Orbit Lab: a Pygame projectile simulator. Run with `python gravity.py`."""
+
 import math
+from dataclasses import dataclass
 
 import pygame
 
-pygame.init()
 
-BASE_WIDTH = 600
-BASE_HEIGHT = 400
-screen = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Ballistic Simulator")
-clock = pygame.time.Clock()
-
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-GREEN = (190, 235, 80)
-RED = (235, 100, 100)
-BLUE = (50, 150, 255)
-GRAY = (100, 100, 100)
-
-GRAVITY = 500.0
-PIXELS_PER_METER = 50.0
-LAUNCH_IMPULSE_SECONDS = 0.2
-
-PROJECTILES = [
-    {"name": "Light", "mass": 0.5, "radius": 5, "color": BLUE},
-    {"name": "Medium", "mass": 1.0, "radius": 8, "color": BLACK},
-    {"name": "Heavy", "mass": 2.0, "radius": 11, "color": GRAY},
-]
-
-launcher_pos = pygame.Vector2(95, 355)
-projectile = None
-velocity = pygame.Vector2()
-flying = False
-trajectory = []
-
-force_text = "60"
-angle_text = "45"
-projectile_index = 1
-focused_field = None
-dropdown_open = False
-status_message = ""
-status_color = RED
-running = True
+WIDTH, HEIGHT = 1180, 760
+GRAVITY = 10.0  # m/s²; matches the original 500 px/s² at 50 px/m.
+IMPULSE_SECONDS = 0.2
+BG = (12, 18, 30)
+PANEL = (20, 29, 45)
+FIELD = (13, 22, 36)
+BORDER = (43, 58, 79)
+TEXT = (231, 239, 250)
+MUTED = (143, 161, 185)
+CYAN = (74, 222, 204)
+ORANGE = (255, 184, 107)
+RED = (255, 128, 140)
+PROJECTILES = (
+    ("Light", 0.5, 6, (116, 189, 255)),
+    ("Medium", 1.0, 8, CYAN),
+    ("Heavy", 2.0, 11, ORANGE),
+)
 
 
-def get_scale():
-    width, height = screen.get_size()
-    return min(width / BASE_WIDTH, height / BASE_HEIGHT)
+@dataclass(frozen=True)
+class Shot:
+    force: float
+    angle: float
+    kind: int
+
+    @property
+    def speed(self):
+        return self.force * IMPULSE_SECONDS / PROJECTILES[self.kind][1]
+
+    @property
+    def vx(self):
+        return self.speed * math.cos(math.radians(self.angle))
+
+    @property
+    def vy(self):
+        return self.speed * math.sin(math.radians(self.angle))
+
+    @property
+    def duration(self):
+        return 2 * self.vy / GRAVITY
+
+    @property
+    def distance(self):
+        return self.vx * self.duration
+
+    @property
+    def apex(self):
+        return self.vy**2 / (2 * GRAVITY)
+
+    def position(self, time):
+        return self.vx * time, max(0.0, self.vy * time - 0.5 * GRAVITY * time**2)
 
 
-def to_screen(pos):
-    pos = pygame.Vector2(pos)
-    scale = get_scale()
-    width, height = screen.get_size()
-    offset_x = (width - BASE_WIDTH * scale) / 2
-    offset_y = (height - BASE_HEIGHT * scale) / 2
-    return pygame.Vector2(
-        offset_x + pos.x * scale,
-        offset_y + pos.y * scale,
-    )
+class Simulator:
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+        pygame.display.set_caption("Orbit Lab | Ballistic Simulator")
+        self.canvas = pygame.Surface((WIDTH, HEIGHT))
+        self.clock = pygame.time.Clock()
+        self.fonts = {}
+        self.values = {"force": "60", "angle": "45"}
+        self.focus = None
+        self.select_all = False
+        self.kind = 1
+        self.shot = None
+        self.elapsed = 0.0
+        self.state = "ready"
+        self.error = ""
+        self.slow = False
+        self.mouse = (-1, -1)
+        self.viewport = pygame.Rect(0, 0, WIDTH, HEIGHT)
+        self.controls = {
+            "force": pygame.Rect(44, 214, 228, 54),
+            "angle": pygame.Rect(44, 316, 228, 54),
+            "launch": pygame.Rect(44, 566, 228, 48),
+            "pause": pygame.Rect(44, 626, 108, 42),
+            "reset": pygame.Rect(164, 626, 108, 42),
+            "slow": pygame.Rect(978, 121, 144, 32),
+        }
+        self.cards = [pygame.Rect(44 + i * 78, 431, 72, 92) for i in range(3)]
 
+    def font(self, size, bold=False):
+        key = size, bold
+        if key not in self.fonts:
+            self.fonts[key] = pygame.font.SysFont("segoeui", size, bold=bold)
+        return self.fonts[key]
 
-def from_screen(pos):
-    scale = get_scale()
-    width, height = screen.get_size()
-    offset_x = (width - BASE_WIDTH * scale) / 2
-    offset_y = (height - BASE_HEIGHT * scale) / 2
-    return pygame.Vector2(
-        (pos[0] - offset_x) / scale,
-        (pos[1] - offset_y) / scale,
-    )
+    def text(self, message, x, y, size=16, color=TEXT, bold=False):
+        self.canvas.blit(self.font(size, bold).render(str(message), True, color), (x, y))
 
+    def box(self, rect, color=PANEL, border=None, radius=14):
+        pygame.draw.rect(self.canvas, color, rect, border_radius=radius)
+        if border:
+            pygame.draw.rect(self.canvas, border, rect, width=1, border_radius=radius)
 
-def scaled_rect(x, y, width, height):
-    first = to_screen((x, y))
-    second = to_screen((x + width, y + height))
-    return pygame.Rect(
-        round(first.x),
-        round(first.y),
-        round(second.x - first.x),
-        round(second.y - first.y),
-    )
+    def button(self, name, title, primary=False, enabled=True):
+        rect = self.controls[name]
+        hover = rect.collidepoint(self.mouse) and enabled
+        color = CYAN if primary else ((35, 49, 68) if hover else PANEL)
+        if primary and hover:
+            color = (110, 239, 221)
+        self.box(rect, color, None if primary else BORDER, 10)
+        ink = BG if primary else (TEXT if enabled else MUTED)
+        label = self.font(16, True).render(title, True, ink)
+        self.canvas.blit(label, label.get_rect(center=rect.center))
 
+    def parameters(self):
+        try:
+            force, angle = float(self.values["force"]), float(self.values["angle"])
+        except ValueError:
+            raise ValueError("Enter a number in both fields.") from None
+        if not math.isfinite(force) or not 0 < force <= 500:
+            raise ValueError("Force must be between 0 and 500 N.")
+        if not math.isfinite(angle) or not 0 <= angle <= 90:
+            raise ValueError("Angle must be between 0 and 90°.")
+        return Shot(force, angle, self.kind)
 
-def font(size, bold=False):
-    return pygame.font.SysFont("Arial", max(9, round(size * get_scale())), bold=bold)
+    def launch(self):
+        try:
+            shot = self.parameters()
+        except ValueError as exc:
+            self.error = str(exc)
+            return
+        self.shot = shot
+        self.elapsed = 0.0
+        self.state = "flying" if shot.duration > 1e-10 else "landed"
+        self.error = ""
+        self.focus = None
 
+    def reset(self):
+        self.shot = None
+        self.elapsed = 0.0
+        self.state = "ready"
+        self.error = ""
 
-def draw_text(text, position, size=12, color=BLACK, bold=False):
-    image = font(size, bold).render(text, True, color)
-    screen.blit(image, to_screen(position))
+    def pause(self):
+        if self.state in ("flying", "paused"):
+            self.state = "paused" if self.state == "flying" else "flying"
 
-
-def draw_button(rect, text, color):
-    pygame.draw.rect(screen, color, rect)
-    pygame.draw.rect(screen, BLACK, rect, max(1, round(2 * get_scale())))
-    image = font(13, True).render(text, True, BLACK)
-    screen.blit(
-        image,
-        (rect.centerx - image.get_width() // 2, rect.centery - image.get_height() // 2),
-    )
-
-
-def draw_input(rect, value, active=False):
-    pygame.draw.rect(screen, WHITE, rect)
-    pygame.draw.rect(
-        screen,
-        BLUE if active else BLACK,
-        rect,
-        max(1, round((2 if active else 1) * get_scale())),
-    )
-    image = font(12).render(value, True, BLACK)
-    screen.blit(
-        image,
-        (rect.x + round(4 * get_scale()), rect.centery - image.get_height() // 2),
-    )
-
-
-def draw_dotted_line(points, color=BLACK):
-    if len(points) < 2:
-        return
-
-    scale = get_scale()
-    spacing = 18 * scale
-    radius = max(2, round(5 * scale))
-    distance = 0
-
-    for index in range(1, len(points)):
-        first = to_screen(points[index - 1])
-        second = to_screen(points[index])
-        segment = second - first
-        length = segment.length()
-        if length == 0:
-            continue
-        direction = segment.normalize()
-        while distance < length:
-            point = first + direction * distance
-            pygame.draw.circle(screen, color, (round(point.x), round(point.y)), radius)
-            distance += spacing
-        distance -= length
-
-
-def start_simulation():
-    global projectile, velocity, flying, trajectory, status_message
-
-    try:
-        force = float(force_text)
-        angle = float(angle_text)
-    except ValueError:
-        status_message = "Enter a valid number for force and angle."
-        return
-
-    if not math.isfinite(force) or not 0 < force <= 500:
-        status_message = "Force must be greater than 0 and at most 500 N."
-        return
-    if not math.isfinite(angle) or not 0 <= angle <= 90:
-        status_message = "Angle must be between 0 and 90 degrees."
-        return
-
-    selected = PROJECTILES[projectile_index]
-    speed = (
-        force
-        / selected["mass"]
-        * LAUNCH_IMPULSE_SECONDS
-        * PIXELS_PER_METER
-    )
-    radians = math.radians(angle)
-    velocity = pygame.Vector2(
-        math.cos(radians) * speed,
-        -math.sin(radians) * speed,
-    )
-    projectile = launcher_pos.copy()
-    flying = True
-    trajectory = [projectile.copy()]
-    status_message = ""
-
-
-def stop_simulation():
-    global flying, status_message
-    flying = False
-    status_message = "Simulation stopped."
-
-
-def set_projectile(index):
-    global projectile_index, dropdown_open
-    projectile_index = index % len(PROJECTILES)
-    dropdown_open = False
-
-
-while running:
-    dt = clock.tick(60) / 1000.0
-
-    start_rect = scaled_rect(80, 7, 52, 32)
-    stop_rect = scaled_rect(138, 7, 48, 32)
-    force_rect = scaled_rect(223, 11, 55, 24)
-    projectile_rect = scaled_rect(348, 11, 91, 24)
-    angle_rect = scaled_rect(492, 11, 51, 24)
-
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            focused_field = None
-
-            if start_rect.collidepoint(event.pos):
-                dropdown_open = False
-                start_simulation()
-            elif stop_rect.collidepoint(event.pos):
-                dropdown_open = False
-                stop_simulation()
-            elif force_rect.collidepoint(event.pos):
-                focused_field = "force"
-                dropdown_open = False
-            elif angle_rect.collidepoint(event.pos):
-                focused_field = "angle"
-                dropdown_open = False
-            elif projectile_rect.collidepoint(event.pos):
-                dropdown_open = not dropdown_open
-            elif dropdown_open:
-                for index in range(len(PROJECTILES)):
-                    option_rect = scaled_rect(
-                        348,
-                        35 + index * 24,
-                        91,
-                        24,
-                    )
-                    if option_rect.collidepoint(event.pos):
-                        set_projectile(index)
-                        break
-                else:
-                    dropdown_open = False
-
+    def event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            pos = self.logical_position(event.pos)
+            self.focus = None
+            for name in ("force", "angle"):
+                if self.controls[name].collidepoint(pos):
+                    self.focus = name
+                    self.select_all = True
+                    return
+            for i, card in enumerate(self.cards):
+                if card.collidepoint(pos):
+                    self.kind = i
+                    return
+            for name, action in (("launch", self.launch), ("pause", self.pause), ("reset", self.reset)):
+                if self.controls[name].collidepoint(pos):
+                    action()
+                    return
+            if self.controls["slow"].collidepoint(pos):
+                self.slow = not self.slow
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                focused_field = None
-                dropdown_open = False
-            elif dropdown_open and event.key in (pygame.K_UP, pygame.K_DOWN):
-                step = -1 if event.key == pygame.K_UP else 1
-                set_projectile(projectile_index + step)
-            elif focused_field:
-                value = force_text if focused_field == "force" else angle_text
-                if event.key == pygame.K_BACKSPACE:
-                    value = value[:-1]
+                self.focus = None
+            elif event.key == pygame.K_TAB:
+                self.focus = "angle" if self.focus == "force" else "force"
+                self.select_all = True
+            elif self.focus:
+                if event.key == pygame.K_RETURN:
+                    self.launch()
                 elif event.key == pygame.K_a and event.mod & pygame.KMOD_CTRL:
-                    value = ""
-                elif event.key == pygame.K_RETURN:
-                    focused_field = None
-                elif event.key == pygame.K_DELETE:
-                    value = ""
+                    self.select_all = True
+                elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
+                    self.values[self.focus] = "" if self.select_all or event.key == pygame.K_DELETE else self.values[self.focus][:-1]
+                    self.select_all = False
                 elif event.unicode and event.unicode in "0123456789.":
-                    if event.unicode != "." or "." not in value:
-                        value += event.unicode
+                    value = "" if self.select_all else self.values[self.focus]
+                    if len(value) < 9 and (event.unicode != "." or "." not in value):
+                        self.values[self.focus] = value + event.unicode
+                        self.select_all = False
+                        self.error = ""
+            elif event.key == pygame.K_SPACE:
+                if self.state in ("flying", "paused"):
+                    self.pause()
+                else:
+                    self.launch()
+            elif event.key == pygame.K_r:
+                self.reset()
+            elif event.key == pygame.K_RETURN:
+                self.launch()
 
-                if focused_field == "force":
-                    force_text = value
-                elif focused_field == "angle":
-                    angle_text = value
+    def update(self, dt):
+        if self.state == "flying" and self.shot:
+            self.elapsed = min(self.shot.duration, self.elapsed + min(dt, 0.05) * (0.25 if self.slow else 1))
+            if self.elapsed >= self.shot.duration:
+                self.state = "landed"
 
-    if flying and projectile is not None:
-        velocity.y += GRAVITY * dt
-        projectile += velocity * dt
-        trajectory.append(projectile.copy())
+    def logical_position(self, pos):
+        return ((pos[0] - self.viewport.x) * WIDTH / self.viewport.width,
+                (pos[1] - self.viewport.y) * HEIGHT / self.viewport.height)
 
-        if projectile.y >= BASE_HEIGHT - 12:
-            projectile.y = BASE_HEIGHT - 12
-            flying = False
-        elif projectile.x > BASE_WIDTH or projectile.x < 72 or projectile.y < 48:
-            flying = False
+    def draw_sidebar(self):
+        self.box((24, 116, 268, 578), PANEL, BORDER, 18)
+        self.text("LAUNCH SETUP", 44, 139, 13, CYAN, True)
+        self.text("Set your trajectory.", 44, 163, 21, bold=True)
+        for name, label, unit, y, hint in (
+            ("force", "Launch force", "N", 190, "0 < force ≤ 500 N"),
+            ("angle", "Launch angle", "°", 292, "0° horizontal  /  90° vertical"),
+        ):
+            self.text(label, 44, y, 14, MUTED)
+            rect = self.controls[name]
+            active = self.focus == name
+            self.box(rect, FIELD, CYAN if active else BORDER, 10)
+            if active and self.select_all:
+                self.box((55, rect.y + 10, max(16, self.font(23, True).size(self.values[name])[0] + 5), 32), (43, 83, 100), radius=4)
+            self.text(self.values[name], 58, rect.y + 10, 23, bold=True)
+            self.text(unit, rect.right - 30, rect.y + 15, 18, MUTED)
+            if active and not self.select_all and pygame.time.get_ticks() % 1000 < 500:
+                x = 60 + self.font(23, True).size(self.values[name])[0]
+                pygame.draw.line(self.canvas, CYAN, (x, rect.y + 14), (x, rect.y + 39), 2)
+            self.text(hint, 46, rect.bottom + 5, 12, MUTED)
+        self.text("Projectile mass", 44, 405, 14, MUTED)
+        for i, (name, mass, radius, color) in enumerate(PROJECTILES):
+            rect = self.cards[i]
+            self.box(rect, (28, 49, 61) if i == self.kind else FIELD, CYAN if i == self.kind else BORDER, 10)
+            pygame.draw.circle(self.canvas, color, (rect.centerx, rect.y + 22), radius)
+            self.text(name, rect.x + 9, rect.y + 41, 13, bold=True)
+            self.text(f"{mass:g} kg", rect.x + 12, rect.y + 63, 13, MUTED)
+        self.text("Impulse duration  ·  0.20 s", 44, 537, 13, MUTED)
+        self.button("launch", "Launch projectile  →", primary=True)
+        self.button("pause", "Resume" if self.state == "paused" else "Pause", enabled=self.state in ("paused", "flying"))
+        self.button("reset", "Reset")
 
-    screen.fill(WHITE)
-    scale = get_scale()
+    def draw_plot(self, shot):
+        self.box((312, 116, 844, 450), PANEL, BORDER, 18)
+        self.text("TRAJECTORY", 336, 132, 13, MUTED, True)
+        self.text("Ideal motion  ·  no air resistance", 336, 156, 13, MUTED)
+        self.button("slow", "0.25× speed" if self.slow else "1× speed")
+        # One scale for both axes preserves the physical shape of the parabola.
+        plot = pygame.Rect(365, 208, 742, 297)
+        scale = min(plot.width / max(18, shot.distance * 1.16), plot.height / max(7, shot.apex * 1.3))
+        origin = pygame.Vector2(plot.left, plot.bottom)
 
-    # Workspace and frame echo the reference's heavy black borders.
-    pygame.draw.rect(screen, WHITE, scaled_rect(72, 48, 528, 352))
-    pygame.draw.rect(screen, BLACK, scaled_rect(72, 48, 528, 352), max(2, round(3 * scale)))
-    pygame.draw.rect(screen, WHITE, scaled_rect(0, 0, 72, 400))
-    pygame.draw.line(
-        screen,
-        BLACK,
-        to_screen((72, 47)),
-        to_screen((600, 47)),
-        max(2, round(4 * scale)),
-    )
+        def point(time):
+            x, y = shot.position(time)
+            return origin + pygame.Vector2(x * scale, -y * scale)
 
-    # Left tool rail.
-    for y in (55, 111, 167, 223, 279, 335):
-        pygame.draw.rect(screen, WHITE, scaled_rect(5, y, 58, 46))
-        pygame.draw.rect(screen, BLACK, scaled_rect(5, y, 58, 46), max(2, round(3 * scale)))
+        span = plot.width / scale
+        raw = span / 7
+        base = 10 ** math.floor(math.log10(raw))
+        step = next(n * base for n in (1, 2, 5, 10) if n * base >= raw)
+        for i in range(int(span / step) + 1):
+            x = round(origin.x + i * step * scale)
+            pygame.draw.line(self.canvas, (31, 44, 62), (x, plot.top), (x, plot.bottom))
+            self.text(f"{i * step:g}", x - 4, 516, 11, MUTED)
+        for i in range(int(plot.height / scale / step) + 1):
+            y = round(origin.y - i * step * scale)
+            pygame.draw.line(self.canvas, (31, 44, 62), (plot.left, y), (plot.right, y))
+            self.text(f"{i * step:g}", 327, y - 8, 11, MUTED)
+        self.text("m", 330, 190, 11, MUTED)
+        self.text("DISTANCE / m", 1006, 540, 10, MUTED, True)
+        pygame.draw.line(self.canvas, (70, 99, 112), origin, (plot.right, plot.bottom), 2)
 
-    pygame.draw.circle(screen, BLACK, tuple(map(round, to_screen((26, 78)))), max(3, round(7 * scale)))
-    pygame.draw.line(screen, BLACK, to_screen((28, 78)), to_screen((49, 65)), max(2, round(3 * scale)))
-    pygame.draw.line(screen, BLACK, to_screen((34, 120)), to_screen((34, 145)), max(2, round(3 * scale)))
-    pygame.draw.polygon(screen, BLACK, [to_screen((27, 139)), to_screen((34, 148)), to_screen((41, 139))])
-    pygame.draw.rect(screen, BLACK, scaled_rect(18, 177, 29, 22), max(2, round(2 * scale)))
-    pygame.draw.circle(screen, BLACK, tuple(map(round, to_screen((32, 202)))), max(2, round(5 * scale)))
-    pygame.draw.circle(screen, BLUE, tuple(map(round, to_screen((32, 247)))), max(3, round(13 * scale)), max(1, round(2 * scale)))
-    pygame.draw.arc(screen, RED, scaled_rect(18, 233, 28, 28), 0, math.pi, max(1, round(2 * scale)))
-    pygame.draw.line(screen, BLACK, to_screen((15, 291)), to_screen((48, 310)), max(2, round(3 * scale)))
-    pygame.draw.polygon(screen, BLACK, [to_screen((48, 310)), to_screen((40, 300)), to_screen((39, 308))])
-    pygame.draw.circle(screen, BLUE, tuple(map(round, to_screen((27, 358)))), max(3, round(12 * scale)))
-    pygame.draw.circle(screen, GREEN, tuple(map(round, to_screen((39, 360)))), max(2, round(5 * scale)))
+        for i in range(1, 81):
+            pygame.draw.circle(self.canvas, (67, 97, 111), point(shot.duration * i / 80), 2)
+        if shot.apex > 0.1:
+            apex = point(shot.duration / 2)
+            pygame.draw.circle(self.canvas, ORANGE, apex, 4)
+            self.text(f"APEX  {shot.apex:.1f} m", min(apex.x + 12, plot.right - 125), apex.y - 22, 12, ORANGE, True)
 
-    # Top toolbar: launch controls and editable launch parameters.
-    draw_button(start_rect, "Start", GREEN)
-    draw_button(stop_rect, "Stop", RED)
-    draw_text("Force", (190, 17), 12, bold=True)
-    draw_input(force_rect, force_text, focused_field == "force")
-    draw_text("N", (281, 17), 12)
-    draw_text("Projectile", (291, 17), 11, bold=True)
-    draw_input(projectile_rect, PROJECTILES[projectile_index]["name"])
-    arrow = [
-        to_screen((426, 20)),
-        to_screen((433, 20)),
-        to_screen((429.5, 25)),
-    ]
-    pygame.draw.polygon(screen, BLACK, arrow)
-    draw_text("Angle", (454, 17), 12, bold=True)
-    draw_input(angle_rect, angle_text, focused_field == "angle")
-    draw_text("°", (548, 17), 12)
+        angle = math.radians(shot.angle)
+        barrel = origin + pygame.Vector2(math.cos(angle), -math.sin(angle)) * 35
+        pygame.draw.line(self.canvas, (45, 84, 94), origin, barrel, 15)
+        pygame.draw.line(self.canvas, CYAN, origin, barrel, 7)
+        pygame.draw.circle(self.canvas, (37, 57, 72), origin, 14)
+        pygame.draw.circle(self.canvas, CYAN, origin, 6)
+        if self.shot:
+            points = [point(self.elapsed * i / 120) for i in range(121)]
+            pygame.draw.lines(self.canvas, CYAN, False, points, 3)
+            pos = point(self.elapsed)
+            _, _, radius, color = PROJECTILES[shot.kind]
+            glow = pygame.Surface((64, 64), pygame.SRCALPHA)
+            for r, alpha in ((24, 12), (18, 20), (13, 30)):
+                pygame.draw.circle(glow, (*color, alpha), (32, 32), r)
+            self.canvas.blit(glow, (pos.x - 32, pos.y - 32))
+            pygame.draw.circle(self.canvas, color, pos, radius)
+            pygame.draw.circle(self.canvas, TEXT, pos, radius, 1)
+            if self.state == "landed":
+                self.text("LANDED", min(pos.x + 13, plot.right - 66), pos.y - 26, 11, CYAN, True)
 
-    # Trajectory path.
-    if len(trajectory) > 1:
-        draw_dotted_line(trajectory)
+    def draw(self):
+        self.canvas.fill(BG)
+        self.box((24, 28, 44, 44), (26, 57, 64), radius=13)
+        pygame.draw.circle(self.canvas, CYAN, (46, 50), 12, 1)
+        pygame.draw.circle(self.canvas, CYAN, (54, 41), 4)
+        self.text("ORBIT LAB", 82, 23, 28, bold=True)
+        self.text("Ballistic simulator / explore motion", 83, 62, 14, MUTED)
+        status = {"ready": "READY TO LAUNCH", "flying": "IN FLIGHT", "paused": "SIMULATION PAUSED", "landed": "FLIGHT COMPLETE"}[self.state]
+        self.box((928, 37, 228, 35), PANEL, BORDER, 17)
+        pygame.draw.circle(self.canvas, ORANGE if self.state == "paused" else CYAN, (945, 54), 4)
+        self.text(status, 958, 44, 12, bold=True)
+        self.draw_sidebar()
+        try:
+            preview = self.parameters()
+        except ValueError:
+            preview = Shot(60, 45, self.kind)
+        shot = self.shot or preview
+        self.draw_plot(shot)
+        self.text("FLIGHT TELEMETRY" if self.shot else "PREDICTED FLIGHT", 314, 584, 12, MUTED, True)
+        _, altitude = shot.position(self.elapsed)
+        speed = math.hypot(shot.vx, shot.vy - GRAVITY * self.elapsed)
+        stats = (("SPEED", f"{speed:.1f}", "m/s"), ("ALTITUDE", f"{altitude:.1f}", "m"),
+                 ("RANGE", f"{shot.distance:.1f}", "m"), ("FLIGHT TIME", f"{self.elapsed:.2f}" if self.shot else f"{shot.duration:.2f}", "s"))
+        for i, (label, value, unit) in enumerate(stats):
+            left = 312 + i * 214
+            self.box((left, 610, 202, 84), PANEL, BORDER, 12)
+            self.text(label, left + 16, 621, 11, MUTED, True)
+            self.text(value, left + 16, 642, 27, CYAN if i == 0 else TEXT, True)
+            self.text(unit, left + 154, 656, 13, MUTED)
+        if self.error:
+            self.text(self.error, 314, 708, 14, RED)
+        else:
+            self.text("SPACE  launch / pause     R  reset     TAB  switch input", 26, 715, 12, MUTED)
+            self.text("g = 10 m/s²   ·   Scale adjusts to fit the full flight", 823, 715, 12, MUTED)
+        width, height = self.screen.get_size()
+        scale = min(width / WIDTH, height / HEIGHT)
+        size = max(1, round(WIDTH * scale)), max(1, round(HEIGHT * scale))
+        self.viewport = pygame.Rect((width - size[0]) // 2, (height - size[1]) // 2, *size)
+        self.screen.fill(BG)
+        self.screen.blit(pygame.transform.smoothscale(self.canvas, size), self.viewport)
+        pygame.display.flip()
 
-    # Launcher and projectile.
-    launcher_screen = to_screen(launcher_pos)
-    pygame.draw.circle(screen, BLACK, tuple(map(round, launcher_screen)), max(2, round(12 * scale)))
-    barrel_angle = math.radians(float(angle_text)) if angle_text.replace(".", "", 1).isdigit() else math.pi / 4
-    barrel_end = launcher_pos + pygame.Vector2(
-        math.cos(barrel_angle) * 36,
-        -math.sin(barrel_angle) * 36,
-    )
-    pygame.draw.line(
-        screen,
-        BLACK,
-        launcher_screen,
-        to_screen(barrel_end),
-        max(2, round(8 * scale)),
-    )
+    def run(self):
+        running = True
+        try:
+            while running:
+                dt = self.clock.tick(60) / 1000
+                self.mouse = self.logical_position(pygame.mouse.get_pos())
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        running = False
+                    else:
+                        self.event(event)
+                self.update(dt)
+                self.draw()
+        finally:
+            pygame.quit()
 
-    if projectile is not None:
-        selected = PROJECTILES[projectile_index]
-        point = to_screen(projectile)
-        radius = max(2, round(selected["radius"] * scale))
-        pygame.draw.circle(screen, selected["color"], tuple(map(round, point)), radius)
-        pygame.draw.circle(screen, BLACK, tuple(map(round, point)), radius, max(1, round(scale)))
 
-    if status_message:
-        message_rect = scaled_rect(82, 53, 510, 22)
-        pygame.draw.rect(screen, WHITE, message_rect)
-        draw_text(status_message, (87, 57), 11, status_color)
-
-    if dropdown_open:
-        for index, item in enumerate(PROJECTILES):
-            option_rect = scaled_rect(348, 35 + index * 24, 91, 24)
-            pygame.draw.rect(screen, WHITE, option_rect)
-            pygame.draw.rect(screen, BLACK, option_rect, max(1, round(scale)))
-            draw_text(f"{item['name']} ({item['mass']:g} kg)", (352, 41 + index * 24), 10)
-
-    pygame.display.flip()
-
-#pygame.quit()
+if __name__ == "__main__":
+    Simulator().run()
