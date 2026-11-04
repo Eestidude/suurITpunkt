@@ -16,6 +16,7 @@ else:
 dir_gfx = dir_path / "gfx"
 dir_sim = dir_path / "simulaatorid"
 
+
 sims = [p.name for p in dir_sim.glob("*.py")]
 pg.init()
 käsi = pg.cursors.Cursor(pg.SYSTEM_CURSOR_HAND)
@@ -58,6 +59,7 @@ tausta_värv = [230,230,230]
 
 
 screen.fill(tausta_värv)
+thumb = pg.image.load(dir_gfx / "thumb.jpg")
 
 def start_menu():
     dragables = [side_bar_scroll_bar_slider]
@@ -73,7 +75,7 @@ def start_menu():
     for sim in sims:
         
         uus_tekst = sim
-        uus_tekst = Text(tekst = uus_tekst, offset=(50,-20), font_size = 24)
+        uus_tekst = Text(tekst = uus_tekst, offset=(100,-20), font_size = 24)
         uus_rect = pg.Rect(ikoon_x, ikoon_y, ikoon_w, ikoon_h)
         
         image_path = dir_gfx / f"{Path(sim).stem}.jpg"
@@ -174,7 +176,7 @@ def start_menu():
             joonista_nupp(nupp)
         for objekt in tausta_objektid:
             joonista_tausta_objekt(objekt)
-        
+        screen.blit(thumb, (150,40))
         pg.display.flip()
     
 class Text:
