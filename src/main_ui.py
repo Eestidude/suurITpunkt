@@ -41,7 +41,7 @@ running = True
 
 pg.display.set_icon(pg.image.load(dir_gfx / "logo2.png"))
 screen = pg.display.set_mode((el,ek), pg.RESIZABLE)
-pg.display.set_caption('Füstastic"')
+pg.display.set_caption('Füstastic')
 
 
 ''' KONSTANTID'''
