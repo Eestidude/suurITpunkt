@@ -7,7 +7,7 @@ pygame.init()
 BASE_WIDTH = 600
 BASE_HEIGHT = 400
 screen = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Two-Body Gravity Simulation")
+pygame.display.set_caption("Füstastic - Two-Body Gravity Simulation")
 clock = pygame.time.Clock()
 
 BLACK = (0, 0, 0)

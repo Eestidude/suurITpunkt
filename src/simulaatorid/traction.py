@@ -50,7 +50,7 @@ def advance_motion(position, speed, elapsed, dt, friction, angle):
 def main():
     pygame.init()
     screen = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
-    pygame.display.set_caption("Ramp - Friction Simulation")
+    pygame.display.set_caption("Füstastic - Ramp Friction Simulation")
     clock = pygame.time.Clock()
     canvas = pygame.Surface((BASE_WIDTH, BASE_HEIGHT))
     fonts = {size: pygame.font.SysFont("Arial", size) for size in (13, 15, 18, 24)}

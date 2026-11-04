@@ -38,8 +38,10 @@ ek = 800 * scale
 el = 600 * scale
 running = True
 
+
+pg.display.set_icon(pg.image.load(dir_gfx / "logo2.png"))
 screen = pg.display.set_mode((el,ek), pg.RESIZABLE)
-pg.display.set_caption('Füüsika "simulatsioonid"')
+pg.display.set_caption('Füstastic"')
 
 
 ''' KONSTANTID'''
@@ -157,7 +159,7 @@ def start_menu():
 
                                 exec(compile(code, str(script_path), "exec"), namespace, namespace)
                                 pg.display.set_mode((el,ek), pg.RESIZABLE)
-                                pg.display.set_caption("Füüsika simulatsioonid")
+                                pg.display.set_caption("Füstastic")
                     
                                 
         if not dragging and not dragging_bar:

@@ -63,7 +63,7 @@ class Simulator:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
-        pygame.display.set_caption("Ballistika | Ballistic Simulator")
+        pygame.display.set_caption("Füstastic - Ballistika")
         self.canvas = pygame.Surface((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
         self.fonts = {}
@@ -300,7 +300,7 @@ class Simulator:
         pygame.draw.circle(self.canvas, CYAN, (46, 50), 12, 1)
         pygame.draw.circle(self.canvas, CYAN, (54, 41), 4)
         self.text("BALLISTIKA", 82, 23, 28, bold=True)
-        self.text("Ballistic simulator / explore motion", 83, 62, 14, MUTED)
+        self.text("Ballistic simulator", 83, 62, 14, MUTED)
         status = {"ready": "READY TO LAUNCH", "flying": "IN FLIGHT", "paused": "SIMULATION PAUSED", "landed": "FLIGHT COMPLETE"}[self.state]
         self.box((928, 37, 228, 35), PANEL, BORDER, 17)
         pygame.draw.circle(self.canvas, ORANGE if self.state == "paused" else CYAN, (945, 54), 4)

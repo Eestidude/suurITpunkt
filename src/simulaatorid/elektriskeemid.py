@@ -1472,7 +1472,7 @@ running = True
 if True:
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Elektriskeemi koostaja")
+    pygame.display.set_caption("Füstastic - Elektriskeemid")
     
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("segoeui", 22)
