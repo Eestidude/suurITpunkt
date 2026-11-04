@@ -353,5 +353,4 @@ class Simulator:
             pygame.quit()
 
 
-if __name__ == "__main__":
-    Simulator().run()
+Simulator().run()
