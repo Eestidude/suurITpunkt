@@ -1,4 +1,4 @@
-"""Orbit Lab: a Pygame projectile simulator. Run with `python gravity.py`."""
+
 
 import math
 from dataclasses import dataclass
