@@ -34,8 +34,8 @@ scale_width = el/2560
 
 scale = min (scale_height, scale_width)
 
-ek = 800 * scale
-el = 600 * scale
+ek = 800
+el = 600
 running = True
 
 
