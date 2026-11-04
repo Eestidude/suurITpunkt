@@ -350,7 +350,7 @@ class Simulator:
                 self.update(dt)
                 self.draw()
         finally:
-            pygame.quit()
+            pass
 
 
 Simulator().run()
